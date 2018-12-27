@@ -40,3 +40,13 @@ rsconnect/
 .dll
 *.Rdata
 *.rds
+*.csv
+*.cpg
+*.dbf
+*.prj
+*.sbn
+*.sbx
+*.shp
+*.xml
+*.shx
+*.ini
