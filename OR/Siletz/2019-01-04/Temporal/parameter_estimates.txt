@@ -1,0 +1,54 @@
+$par
+Beta_mean1 logsigmaB1 Beta_mean2 logsigmaB2  logSigmaM 
+ 0.7821231 -1.3565274  2.5025533 -0.5245710 -0.0346980 
+
+$objective
+[1] 819.9598
+
+$iterations
+[1] 21
+
+$evaluations
+function gradient 
+      34       22 
+
+$time_for_MLE
+Time difference of 0.359067 secs
+
+$max_gradient
+[1] 6.05841e-06
+
+$Convergence_check
+[1] "There is no evidence that the model is not converged"
+
+$number_of_coefficients
+ Total  Fixed Random 
+    45      5     40 
+
+$AIC
+[1] 1649.92
+
+$diagnostics
+                Param starting_value Lower        MLE Upper final_gradient
+Beta_mean1 Beta_mean1       0.000000  -Inf  0.7821231   Inf    3.20908e-07
+logsigmaB1 logsigmaB1       0.000000  -Inf -1.3565274   Inf   -8.63730e-08
+Beta_mean2 Beta_mean2       0.000000  -Inf  2.5025533   Inf    8.06020e-08
+logsigmaB2 logsigmaB2       0.000000  -Inf -0.5245710   Inf    3.87174e-07
+logSigmaM   logSigmaM       1.609438  -Inf -0.0346980    10    6.05841e-06
+
+$SD
+sdreport(.) result
+             Estimate Std. Error
+Beta_mean1  0.7821231 0.12537562
+logsigmaB1 -1.3565274 0.66982523
+Beta_mean2  2.5025533 0.18224431
+logsigmaB2 -0.5245710 0.25957792
+logSigmaM  -0.0346980 0.05061146
+Maximum gradient component: 6.05841e-06 
+
+$time_for_sdreport
+Time difference of 15.42089 secs
+
+$time_for_run
+Time difference of 15.78495 secs
+
