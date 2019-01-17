@@ -5,9 +5,9 @@ rm(list=ls())
 ################
 
 nz_dir <- "C:\\merrill\\stream_networks\\NZ"
-nzdata_dir <- file.path(nz_dir, "data")
 
 data_dir <- file.path(nz_dir, "data")
+data_dir2 <- file.path("C:\\merrill\\StreamUtils\\data")
 
 fig_dir <- file.path(nz_dir, "figures")
 dir.create(fig_dir, showWarnings=FALSE)
@@ -32,7 +32,7 @@ library(RuddR)
 ################
 
 ## all network
-load(file.path(nzdata_dir, "REC2.4fromGDB.Rdata"))
+load(file.path(data_dir, "REC2.4fromGDB.Rdata"))
 network_raw <- REC2.4fromGDB
 
 network <- network_raw %>%
@@ -40,7 +40,7 @@ network <- network_raw %>%
 	rename('parent_s' = tnode, 'child_s' = fnode, 'dist_s'=Shape_Leng, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY, 'segment'=nzsegment, 'NextDownSeg'=NextDownID, 'Headwater'=Headwater)
 
 ## all observations
-load(file.path(nzdata_dir, "Diadromous fish dataset.Rdata"))
+load(file.path(data_dir, "Diadromous fish dataset.Rdata"))
 obs_raw <- NZFFD.REC2.Diad.EF
 
 obs <- obs_raw %>% 
@@ -105,6 +105,38 @@ obsmap <- ggplot() +
 		xlab("Longitude") + ylab("Latitude") +
 		mytheme()
 ggsave(file.path(fig_dir, "NZmap_obs.png"), obsmap)
+
+#############################
+## format all data
+#############################
+
+## network
+network_reformat <- network %>% select('parent_s', 'child_s', 'dist_s', 'lat_child', 'long_child', 'lat_parent', 'long_parent', "NextDownSeg")
+
+root_nodes <- which(network_reformat$parent_s %in% network_reformat$child_s == FALSE)
+true_root_node <- which(network_reformat$NextDownSeg==-1)
+
+root_toUse <- lapply(1:length(root_nodes), function(x){
+	sub <- network_reformat[root_nodes[x],]
+	df <- data.frame('parent_s' = 0, 'child_s' = sub$parent_s, 'dist_s' = Inf, "lat" = sub$lat_parent, 'long' = sub$long_parent)
+	return(df)
+})
+root_toUse <- do.call(rbind, root_toUse)
+
+network_toUse <- network_reformat %>% select(-c('lat_parent','long_parent','NextDownSeg')) %>%
+	rename('lat'=lat_child, 'long'=long_child)
+network_toUse <- rbind.data.frame(network_toUse, unique(root_toUse))
+
+## observations
+obs_reformat <- inner_join(obs, network) %>% select('parent_s', 'child_s', 'dist_s', 'lat_child', 'long_child', 'lat_parent', 'long_parent', "NextDownSeg", 'present', 'year')
+obs_reformat$present <- sapply(1:nrow(obs_reformat), function(x) ifelse(obs_reformat$present[x]==FALSE, 0, 1))
+
+obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSeg'))%>%
+			rename('lat'=lat_child, 'long'=long_child) %>%
+			rename('parent_i' = parent_s, 'child_i' = child_s, 'dist_i' = dist_s)
+
+saveRDS(obs_toUse, file.path(data_dir, "NZ_observations_encounters.rds"))
+saveRDS(network_toUse, file.path(data_dir, "NZ_network.rds"))
 
 #############################
 ## subset Waitaki catchment
@@ -182,3 +214,38 @@ obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSe
 
 saveRDS(obs_toUse, file.path(data_dir, "Waitaki_observations_encounters.rds"))
 saveRDS(network_toUse, file.path(data_dir, "Waitaki_network.rds"))
+
+nz1 <- readRDS(file.path(data_dir, "NZ_observations_encounters.rds"))
+nz2 <- readRDS(file.path(data_dir, "Waitaki_observations_encounters.rds"))
+
+nz3 <- readRDS(file.path(data_dir, "NZ_network.rds"))
+nz4 <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
+
+nz_longfin_eel <- list()
+nz_longfin_eel$observations <- nz1
+nz_longfin_eel$network <- nz3
+save(nz_longfin_eel, file=file.path(data_dir2, "nz_longfin_eel.rda"))
+
+nz_waitaki_longfin_eel <- list()
+nz_waitaki_longfin_eel$observations <- nz2
+nz_waitaki_longfin_eel$network <- nz4
+save(nz_waitaki_longfin_eel, file=file.path(data_dir2, "nz_waitaki_longfin_eel.rda"))
+
+obs <- nz2 %>% select('lat','long','present','year') %>% mutate(observation = ifelse(present == 0, 'absent','present'))
+net <- nz4 %>% select('lat','long')
+
+years <- unique(obs$year)[order(unique(obs$year))]
+net_byYear <- lapply(1:length(years), function(x){
+	netyr <- data.frame(net, "year"=years[x])
+	return(netyr)
+})
+net_byYear <- do.call(rbind, net_byYear)
+
+p <- ggplot() +
+	geom_point(data = net_byYear, aes(x = long, y = lat)) +
+	geom_point(data = obs, aes(x = long, y = lat, color = observation), cex=2, alpha=0.8) +
+	scale_color_brewer(palette = "Set1") +
+	facet_wrap(~year) +
+	xlab("Longitude") + ylab("Latitude") +
+	mytheme()
+ggsave(file.path(fig_dir, "Observations_byYear.png"), width=15, height=10)

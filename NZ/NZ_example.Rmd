@@ -1,0 +1,388 @@
+---
+title: "Using VAST to model stream networks in New Zealand"
+author: "Merrill Rudd"
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
+output: 
+  html_document:
+    toc: true
+bibliography: stream_networks.bib
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Figure and Table Caption Numbering, for HTML do it manually
+capTabNo = 1; capFigNo = 1;
+
+#Function to add the Table Number
+capTab = function(x){
+    x = paste0("Table ",capTabNo,". ",x)
+    capTabNo <<- capTabNo + 1
+   x
+}
+
+#Function to add the Figure Number
+capFig = function(x){
+    x = paste0("Figure ",capFigNo,". ",x)
+    capFigNo <<- capFigNo + 1
+   x
+}
+```
+
+```{r loadpackages, include=FALSE}
+library(tidyverse)
+library(RuddR)
+library(gridExtra)
+```
+
+## Overview
+
+This document summarizes exploration into using the stream network model in the `VAST` R package to estimate densities of longfin eels in New Zealand streams. We focus on the Waitaki watershed as an example.
+
+## New Zealand stream network
+
+### Dataset
+
+The full New Zealand network and observations dataset as well as a subset from only the Waitaki River catchment are available via the `StreamUtils` R package. 
+```{r loaddata}
+library(StreamUtils)
+
+## Full New Zealand network and observations
+load1 <- data("nz_longfin_eel", package="StreamUtils")
+network <- nz_longfin_eel[["network"]]
+observations <- nz_longfin_eel[["observations"]] %>% select('year','present','lat','long')
+
+## Subset of dataset: Waitaki River catchment
+load2 <- data("nz_waitaki_longfin_eel", package="StreamUtils")
+network_sub <- nz_waitaki_longfin_eel[["network"]]
+observations_sub <- nz_waitaki_longfin_eel[["observations"]] %>% select('year','present','lat','long')
+```
+
+The stream network covers the entirety of New Zealand, including `r nrow(unique(network %>% filter(parent_s!=0)))` unique stream segments defined by child (upstream) and parent (downstream) nodes. Across this stream network there are `r nrow(observations)` observations over `r length(unique(observations[,"year"]))` years. 
+
+Due to high computation time associated with modeling the entirety of New Zealand, we limited the initial model runs to the Waitaki River catchment for testing purposes and to focus study questions. We pared down the full Waitaki catchment to include only the lower portion because there were no observations in the upper portion, thus no information contributing to longfin eel density. We pared down the lower Waitaki catchment by taking all network points with latitude less than the maximum latitude observation and longitude greater than the minimum longitude observation.
+
+```{r nzmap, echo=FALSE, fig.cap = capFig("Map of the New Zealand network and Waitaki River catchment subset with observations (red) along the network (black)."), fig.show="hold", fig.align="center"}
+network2 <- network %>% select('long', 'lat') %>% mutate(type = "network node")
+obs2 <- observations %>% select('long','lat') %>% mutate(type = "observation") 
+netobs <- rbind.data.frame(network2,obs2)
+
+nsub2 <- network_sub %>% select('long', 'lat') %>% mutate(type = "network node")
+osub2 <- observations_sub %>% select('long', 'lat') %>% mutate(type = "observation")
+netobs2 <- rbind.data.frame(nsub2,osub2)
+
+obsmap <- ggplot(netobs) +
+		geom_point(aes(x = long, y = lat, color=type)) +
+    scale_color_manual(values = c('black','gray')) +
+    geom_rect(aes(xmin=min(netobs2$long), xmax=max(netobs2$long), ymin=min(netobs2$lat), ymax=max(netobs2$lat)), color = "white", fill = NA) +
+    guides(color=FALSE) +
+		xlab("Longitude") + ylab("Latitude") +
+		mytheme()
+
+obsmap2 <- ggplot(netobs2) +
+    geom_point(aes(x = long, y = lat, color= type)) +
+    scale_color_manual(values = c("black", 'gray')) +
+    guides(color=FALSE) +
+    xlab("Longitude") + ylab("Latitude") +
+    mytheme()
+
+grid.arrange(obsmap, obsmap2, ncol=2)
+```
+
+While observations cover a representative area around the lower Waitaki catchment, there happen to not be many positive encounter observations likely due to the rarity of longfin eels. This may lead to high uncertainty due to estimating encounter probabilities near the lower bound. When extended over time and space, it is easy to see how there is not much information to inform both spatial and temporal effect.
+```{r nzmaptime, echo=FALSE, fig.cap = capFig("Map of the Waitaki River catchment with observations over time. Each observation either encountered or did not encounter longfin eel."), fig.show="hold", fig.align="center"}
+years <- unique(observations_sub$year)[order(unique(observations_sub$year))]
+net_byYear <- lapply(1:length(years), function(x){
+	netyr <- data.frame(network_sub, "year"=years[x])
+	return(netyr)
+})
+net_byYear <- do.call(rbind, net_byYear)
+
+p <- ggplot() +
+	geom_point(data = net_byYear, aes(x = long, y = lat)) +
+	geom_point(data = observations_sub, aes(x = long, y = lat, color = observation), cex=2, alpha=0.8) +
+	scale_color_brewer(palette = "Set1") +
+	facet_wrap(~year) +
+	xlab("Longitude") + ylab("Latitude") +
+	mytheme()
+p
+```
+
+## Fitting VAST models
+
+### Data format
+
+The stream network requires each segment be defined by a child (upstream) and parent (downstream) node, with the stream distance between nodes.
+```{r network1, echo=FALSE}
+library(knitr)
+library(kableExtra)
+kable(head(network_sub), caption = capTab("Setup of stream network data input.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+The network data setup also requires all root segments (parent nodes that are not a child node to any segment) be defined as child nodes, defined in the following manner:
+```{r network2, echo=FALSE}
+network_sub2 <- network_sub %>% filter(parent_s == 0)
+kable(head(network_sub2), caption = capTab("Setup of stream network root nodes.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+Observation data required include the year, observation, latitude, and longitude snapped to the stream network. 
+```{r obs, echo=FALSE}
+kable(head(observations_sub), caption = capTab("Setup of observations along stream network.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+Only encounter/non-encounter data (i.e. presence/absence data) are available for the Waitaki catchment (as opposed to catch in numbers or density). A small jitter in encounter observations is required to fit the VAST logistic regression model.
+
+```{r tiny}
+present <- observations_sub$present
+devs <- rnorm(length(present), 0, 0.01)
+present_new <- sapply(1:length(present), function(x) ifelse(present[x]==1, present[x]+devs[x], present[x]))
+observations_sub$present_new <- present_new
+```
+
+```{r showtiny, echo=FALSE}
+kable(head(observations_sub), caption = capTab("Setup of observations along stream network with small amount of variation added to positive encounters.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+VAST requires these observations in a data frame with headings including the observation, year, latitude, and longitude, as well as the area swept, vessel, and pass associated with each observation (use the following settings if those headings are not applicable).
+```{r DataGeostat}
+Data_Geostat <- data.frame( "Catch_KG" = observations_sub$present_new, 
+              "Year" = observations_sub$year,
+               "AreaSwept_km2" = 1, 
+               "Lat" = observations_sub$lat, 
+               "Lon" = observations_sub$long, 
+               "Vessel" = "missing", 
+               "Pass" = 0,
+               "Category"=0)
+```
+
+### VAST settings
+
+Three R packages are required to run VAST models, which can be downloaded from CRAN or GitHub.
+```{r VAST_packages, message=FALSE, warning=FALSE, results="hide"}
+#devtools::install_github("james-thorson/VAST")
+library(VAST)
+
+#devtools::install_github("merrillrudd/FishStatsUtils")
+library(FishStatsUtils)
+
+#install.packages("TMB")
+library(TMB)
+```
+
+There are many decisions to make in running VAST models. First we choose the version and spatial model type. We also indicate the number of nodes and strata limits, although they are not used in this stream network example. 
+```{r settings1}
+Version = "VAST_v5_2_0" 
+Method = "Stream_network"
+n_x = nrow(network_sub)   
+strata.limits = data.frame('STRATA'="All_areas")
+```
+
+### Defining the spatial area
+
+We create extrapolation and spatial lists to designate the spatial area of the observations and network for VAST.
+```{r lists, message=FALSE, warning=FALSE, results="hide"}
+Extrapolation_List = FishStatsUtils::make_extrapolation_info( Region="User", 
+  input_grid=cbind("Lat"=observations_sub$lat, 
+                    "Lon"=observations_sub$long,
+                    "Area_km2"=1), 
+                  strata.limits=strata.limits )
+
+Spatial_List = FishStatsUtils::make_spatial_info( n_x=n_x, 
+                          Method=Method, 
+                          Lon_i=Data_Geostat[,'Lon'], 
+                          Lat_i=Data_Geostat[,'Lat'], 
+                          "LAT_intensity"=network_sub$lat, 
+                          "LON_intensity"=network_sub$long, 
+                          Extrapolation_List=Extrapolation_List, 
+                          Save_Results=TRUE )
+```
+
+We then add the knots (in this case, network nodes) associated with each observation in `Data_Geostat`.
+```{r DataGeostat2}
+Data_Geostat <- cbind( Data_Geostat, "knot_i" = Spatial_List$knot_i )
+```
+
+### Model 1: Temporal variation only
+
+Field configuration settings in `FieldConfig` turn on or off the spatial and/or spatiotemporal variation in encounter probability (Omega1 and Epsilon1, respectively) and spatial and/or spatiotemporal variation in positive catch rates (Omega2 and Epsilon2, respectively). The variation in positive catch rates (Omega2 and Epsilon2) must be set to 0 when using encounter/non-encounter data since there is there would be no information to inform positive catch rates, only encounter probabilities. Here we also turned off spatial and spatiotemporal variation in encounter probability to start with the simplest model possible, which will consider only temporal changes in eel encounters. 
+```{r fieldconfig}
+FieldConfig = c("Omega1"=0, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+```
+
+The `RhoConfig` vector specifies how temporal intercepts (Beta) or spatiotemporal intercepts (Epsilon) are structured. Options are documented in the VAST package (`?VAST::Data_Fn`). Here we set `Beta1 = 2` choosing a random walk to model the temporal intercept for encounter probability. We set `Beta2 = 3`, a required setting when using encounter/non-encounter rates, which fixes the temporal intercept for positive catch rates over time due to the lack of estimation of positive catch rates. Both spatiotemporal intercepts are set to 0 because we are not considering spatiotemporal effects in this first model run. 
+```{r rhoconfig}
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+```
+
+The `ObsModel` vector specifies the observation model distributions for [1] positive catch rates and [2] functional form for encounter probabilities. In this example we are using catch data in terms of biomass, and thus we can assume a continuous distribution. We are using a gamma distribution to describe positive catch rates and a conventional delta model for the functional form for encounter probabilities. Options for this vector can be found using `?VAST::Data_Fn`.
+```{r obsmodel}
+ObsModel = c("PosDist"=2, "Link"=0)
+```
+
+There are two more optional vectors governing overdispersion `OverdispersionConfig` in [1] encounter probability and [2] positive catch rates and derived values `Options`. There are many derived values with default settings, but for example here we have `Calculate_Range` and `Calculate_effective_area` turned off. 
+```{r overdispersion_and_options}
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options = c("CalculateRange"=0, "Calculate_effective_area"=0)
+```
+
+`Data_Fn` brings the data and network information together into a list. The argument `Network_sz` requires the network data frame with only headings `parent_s`, `child_s`, and `dist_s` for the parent, child, and distance defining each segment. Latitude and longitude should not be included in this data frame. 
+
+```{r net_sz, echo=FALSE}
+Network_sz <- network_sub %>% select(-c('lat','long'))
+kable(head(Network_sz), caption = capTab("`Network_sz` input to VAST::Data_Fn.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+```{r datafn, results="hide", message=FALSE, warning=FALSE}
+Data = Data_Fn("Version"=Version, 
+                "FieldConfig"=FieldConfig, 
+                "OverdispersionConfig"=OverdispersionConfig, 
+                "RhoConfig"=RhoConfig, 
+                "ObsModel"=ObsModel, 
+                "c_iz"=rep(0,nrow(Data_Geostat)), 
+                "b_i"=Data_Geostat[,'Catch_KG'], 
+                "a_i"=Data_Geostat[,'AreaSwept_km2'], 
+                "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1, 
+                "s_i"=Data_Geostat[,'knot_i']-1, 
+                "t_iz"=Data_Geostat[,'Year'], 
+                "a_xl"=Spatial_List$a_xl, 
+                "MeshList"=Spatial_List$MeshList, 
+                "GridList"=Spatial_List$GridList, 
+                "Method"=Spatial_List$Method, 
+                "Options"=Options, 
+                "Network_sz"=Network_sz )
+```
+
+`Build_TMB_Fn` compiles the program, makes sure the data is in the right format, and lists which parameters are set as fixed or random effects. The list of parameter names are explained in the documentation accessed via `?VAST::Param_Fn`.
+
+```{r tmb, results="hide", message=FALSE, warning=FALSE}
+TmbList = Build_TMB_Fn("TmbData"=Data, 
+                        "Version"=Version, 
+                        "RhoConfig"=RhoConfig, 
+                        "loc_x"=Spatial_List$loc_x, 
+                        "Method"=Method)
+```
+
+`Obj` represents the model at the initial parameters and is used to start the model run.
+```{r obj, results="hide", message=FALSE, warning=FALSE}
+Obj = TmbList[["Obj"]]
+```
+
+We then use `TMBhelper::Optimize` to minimize the negative log likelihood and estimate the parameters. We conduct an initial run without deriving standard deviations and with no Newton steps to check initial model performance - testing whether final gradients meet convergence criteria and whether parameters are identifiable. 
+```{r opt1, results="hide"}
+Opt1 = TMBhelper::Optimize( obj=Obj, 
+                          lower=TmbList[["Lower"]], 
+                          upper=TmbList[["Upper"]], 
+                          getsd=FALSE,
+                          newtonsteps=0)
+```
+
+If the initial model run does not produce any errors, we can estimate the standard devitaions with bias correction, and including Newton steps to help find smaller final gradients for all parameters.
+```{r opt2, results="hide", message=FALSE}
+Opt = TMBhelper::Optimize( obj=Obj, 
+                           lower=TmbList[["Lower"]], 
+                           upper=TmbList[["Upper"]], 
+                           getsd=TRUE, 
+                           newtonsteps=3, 
+                           bias.correct=TRUE,
+                           bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+```
+
+We then check the final gradients, make sure the parameters are not hitting bounds, and make sure the standard deviations were derived.
+```{r check1}
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+Opt[["SD"]]
+
+## generate report
+Report <- Obj$report()
+```
+
+Without any spatial variation we can examine the fit to the encounter probabilities, estimated population biomass over time, and estimated population density (shown here despite the lack of spatial effect).
+
+```{r enc1, echo=FALSE, fig.cap = capFig("Fits to the encounter probabilities for longfin eels in the Waitaki catchment.")}
+Enc_prob = plot_encounter_diagnostic( Report=Report, Data=Data)
+include_graphics(file.path(getwd(), "Diag--Encounter_prob.png"))
+```
+
+```{r index1, echo=FALSE, message=FALSE, warning=FALSE, fig.cap = capFig("Biomass index over time for longfin eels in the Waitaki catchment.")}
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+Index = plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE )
+include_graphics(file.path(getwd(), "Index-Biomass.png"))
+```
+
+```{r dens1, echo=FALSE, message=FALSE, warning=FALSE, fig.cap = capFig("Estimated log-density over time for longfin eels in the Waitaki catchment. Blue shows low density and red shows high density, with the scale ranging from -2.5 to -0.5.")}
+MapDetails_List = make_map_info( "Region"="User", "NN_Extrap"=Spatial_List$PolygonList$NN_Extrap, "Extrapolation_List"=Extrapolation_List )
+
+Dens_xt = plot_maps(plot_set=c(3), MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=1.5, pch=19, Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), plot_legend_fig=TRUE)
+
+include_graphics(file.path(getwd(), "Dens.png"))
+```
+
+```{r emap1, echo=FALSE, message=FALSE, warning=FALSE, fig.cap = capFig("Estimated encounter probability over time for longfin eels in the Waitaki catchment. Blue shows low encounter probability and red shows high encounter probability, with the scale ranging from 0.1 to 0.55.")}
+MapDetails_List = make_map_info( "Region"="User", "NN_Extrap"=Spatial_List$PolygonList$NN_Extrap, "Extrapolation_List"=Extrapolation_List )
+
+Enc_xt = plot_maps(plot_set=c(1), MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=1.5, pch=19, Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), plot_legend_fig=TRUE)
+
+include_graphics(file.path(getwd(), "Pres.png"))
+```
+
+### Model 2: Spatial variation
+
+However, when we try turning on spatial variation, estimation is more difficult. 
+
+We turned on spatial variation encounter probabilities and rebuilt the model with the adjustment. 
+```{r fieldconfig2, results="hide", message=FALSE, warning=FALSE}
+FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+```
+
+From initial model explorations, we learned that in order to estimate `logkappa1`, the decorrelation distance in encounter probabilities, we need to adjust the starting value to be relative to the distances in the stream network:
+```{r adjstart}
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+```
+
+We conducted an initial model run and moved forward with estimating the standard deviations starting at the maximum likelihood values from the initial model run:
+```{r opt3, results="hide", message=FALSE}
+Opt1 = TMBhelper::Optimize( obj=Obj, 
+                           lower=TmbList[["Lower"]], 
+                           upper=TmbList[["Upper"]], 
+                           getsd=FALSE, 
+                           newtonsteps=0, 
+                           bias.correct=TRUE )
+```
+
+```{r opt4, results="hide", message=FALSE}
+Opt = TMBhelper::Optimize( obj=Obj, 
+                           startpar = Opt1$par,
+                           lower=TmbList[["Lower"]], 
+                           upper=TmbList[["Upper"]], 
+                           getsd=TRUE, 
+                           newtonsteps=3, 
+                           bias.correct=TRUE,
+                           bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+```
+
+When turning on spatial effects, the Hessian is not positive definite. This will require further exploration to determine whether there is information in the encounter/non-encounter data in the Waitaki region to estimate a spatial effect in addition to the temporal effect. 
