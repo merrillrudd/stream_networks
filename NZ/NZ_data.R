@@ -162,12 +162,6 @@ network_sub_cut <- network_sub %>%
 			filter(lat_parent <= max(c(obs_sub$lat_child,obs_sub$lat_parent)))
 all(obs_sub$segment %in% network_sub_cut$segment)
 
-catchmap2 <- ggplot() +
-		geom_point(data=network_sub_cut, aes(x = long_child, y = lat_child), col="black") +
-		geom_point(data=obs_sub, aes(x = long_child, y = lat_child), col = "red") +
-		xlab("Longitude") + ylab("Latitude") +
-		mytheme()
-ggsave(file.path(fig_dir, "Waitaki_map_sub.png"), catchmap2)
 
 #############################
 ## format
@@ -221,6 +215,7 @@ nz2 <- readRDS(file.path(data_dir, "Waitaki_observations_encounters.rds"))
 nz3 <- readRDS(file.path(data_dir, "NZ_network.rds"))
 nz4 <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
 
+## save rda
 nz_longfin_eel <- list()
 nz_longfin_eel$observations <- nz1
 nz_longfin_eel$network <- nz3
@@ -231,6 +226,7 @@ nz_waitaki_longfin_eel$observations <- nz2
 nz_waitaki_longfin_eel$network <- nz4
 save(nz_waitaki_longfin_eel, file=file.path(data_dir2, "nz_waitaki_longfin_eel.rda"))
 
+### figure - observations by year
 obs <- nz2 %>% select('lat','long','present','year') %>% mutate(observation = ifelse(present == 0, 'absent','present'))
 net <- nz4 %>% select('lat','long')
 
