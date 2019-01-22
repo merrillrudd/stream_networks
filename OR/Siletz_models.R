@@ -16,12 +16,10 @@ dir.create(fig_dir, showWarnings=FALSE)
 #################
 
 devtools::install_github("james-thorson/VAST", ref="development")
-devtools::install_github("merrillrudd/FishStatsUtils")
 devtools::install_github("merrillrudd/RuddR")
 devtools::install_github("merrillrudd/StreamUtils")
 
 library(VAST)
-library(FishStatsUtils)
 library(StreamUtils)
 library(TMB)
 library(tidyverse)
@@ -41,8 +39,8 @@ Network_sz = network %>% select(-c("long","lat"))
 ############################################
 ## model - density observations, 2 surveys
 ############################################
-sil_dir <- file.path(main_dir, "siletz_density")
-dir.create(sil_dir)
+sil_dir <- file.path(main_dir, "siletz")
+dir.create(sil_dir, showWarnings=FALSE)
 setwd(sil_dir)
 
 ##### General settings
@@ -52,9 +50,9 @@ grid_size_km = 1
 n_x = nrow(network)   # Specify number of stations (a.k.a. "knots")
 strata.limits <- data.frame('STRATA'="All_areas")
 
-test_dir <- file.path(main_dir, "test")
-dir.create(test_dir, showWarnings=FALSE)
-
+### for testing purposes
+# test_dir <- file.path(main_dir, "test")
+# dir.create(test_dir, showWarnings=FALSE)
 # save.image(file.path(test_dir,"OR_test.Rdata"))
 
 ##### setup data frame
@@ -90,7 +88,7 @@ Data_Geostat = cbind( Data_Geostat, "knot_i"=Spatial_List$knot_i )
 ##################
 ## 2 surveys
 ##################
-surv2_dir <- file.path(sil_dir, "spatial_effect")
+surv2_dir <- file.path(sil_dir, "spatial")
 dir.create(surv2_dir, showWarnings = FALSE)
 setwd(surv2_dir)
 
@@ -123,7 +121,7 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz )
 
 category_names <- unique(obs$survey)
-p1 <- plot_network(Extrapolation_List = Extrapolation_List, Spatial_List = Spatial_List, TmbData=Data, Data_Geostat = Data_Geostat, category_names=category_names, observations=TRUE, arrows=TRUE, root=TRUE, plot_type=1)
+p1 <- plot_network(Extrapolation_List = Extrapolation_List, Spatial_List = Spatial_List, TmbData=Data, Data_Geostat = Data_Geostat, category_names=category_names, observations=TRUE, arrows=TRUE, root=TRUE, plot_type=1, savedir=NULL)
 p2 <- plot_network(Extrapolation_List = Extrapolation_List, Spatial_List = Spatial_List, TmbData=Data, Data_Geostat = Data_Geostat, category_names=category_names, observations=TRUE, root=TRUE, plot_type=2)
 
 
@@ -146,29 +144,33 @@ H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
 Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
 check <- TMBhelper::Check_Identifiable(Obj)
 
+Save <- list("Opt"=Opt, "Obj"=Obj, "Data"=Data, "Data_Geostat"=Data_Geostat, "Spatial_List"=Spatial_List, "Extrapolation_List"=Extrapolation_List, "FieldConfig"=FieldConfig, "RhoConfig"=RhoConfig, "ObsModel"=ObsModel, "OverdispersionConfig"=OverdispersionConfig, "Options"=Options)
+saveRDS(Save, file.path(surv2_dir, "SaveModelRun.rds"))
+
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]
 
 Report = Obj$report()
 
 ## diagnostics for encounter probability component
-Enc_prob = plot_encounter_diagnostic( Report=Report, Data=Data, DirName=NULL)
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data, savedir=surv2_dir)
 
 ## diagnostics for positive catch rate component
-Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", DateFile=NULL, save_dir=NULL, plot=2) #StreamUtils::
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", DateFile=NULL, savedir=surv2_dir, plot=2) 
 
 ## Plot Pearson residuals
-StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, savedir=NULL, plot_type=1 )
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, savedir=surv2_dir, plot_type=1 )
 
-plot_maps(plot_set=3, Report=Report, TmbData=Data, Spatial_List=Spatial_List, savedir=NULL, category_names = category_names, alpha=0.7, cex=0.8)
-
-plot_maps(plot_set=12, Report=Report, TmbData=Data, Spatial_List=Spatial_List, savedir=NULL, category_names = category_names, alpha=0.7, cex=0.8)
 # Decide which years to plot                                                   
 Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
 Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
 
+StreamUtils::plot_maps(plot_set=3, Report=Report, TmbData=Data, Spatial_List=Spatial_List, savedir=surv2_dir, category_names = category_names, alpha=0.7, cex=0.8)
+
+StreamUtils::plot_maps(plot_set=12, Report=Report, TmbData=Data, Spatial_List=Spatial_List, savedir=surv2_dir, category_names = category_names, alpha=0.7, cex=0.8)
+
 # ## index of abundance
-Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, DirName=NULL, strata_names="Longfin eel", "category_names"=category_names )
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, savedir=surv2_dir, strata_names="Longfin eel", "category_names"=category_names )
 
 #####################################
 ## try turning on spatiotemporal variation
