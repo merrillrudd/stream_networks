@@ -1,0 +1,498 @@
+---
+title: "Using VAST to model stream networks"
+author: "Merrill Rudd"
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
+output: 
+  html_document:
+    toc: true
+bibliography: stream_networks.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Figure and Table Caption Numbering, for HTML do it manually
+capTabNo = 1; capFigNo = 1;
+
+#Function to add the Table Number
+capTab = function(x){
+    x = paste0("Table ",capTabNo,". ",x)
+    capTabNo <<- capTabNo + 1
+   x
+}
+
+#Function to add the Figure Number
+capFig = function(x){
+    x = paste0("Figure ",capFigNo,". ",x)
+    capFigNo <<- capFigNo + 1
+   x
+}
+```
+
+## Overview
+
+This document includes results of testing the VAST stream network spatial model used to account for spatial correlations using network distance within rivers and streams [@hocking_streamnetwork_2018]. The results of simulation testing are presented to compare the use of catch in biomass versus encounter data. 
+
+Case studies explored include 1) coho salmon in the Siletz River in Oregon, USA and 2) longfin eels in the Waitaki River catchment in New Zealand. 
+
+## Simulation
+
+We simulated a stream network with 11 segments, defined by 11 parent (downstream) and child(upstream) nodes. 
+
+```{r simnetwork, include=FALSE}
+library(VAST)
+library(FishStatsUtils)
+library(TMB)
+library(tidyverse)
+library(RuddR)
+
+##################################
+## simulated stream network data
+##################################
+# Network parentage
+set.seed(1)
+parent_x = c( 0, 1, 2, 3, 3, 5, 5, 5, 8, 9, 10 )
+dist_x = c( Inf, rlnorm(length(parent_x)-1, meanlog=0, sdlog=1) )
+Network_xn = cbind( parent_x=parent_x, child_x=1:length(parent_x), dist_x=dist_x )
+Obs_i = 1:nrow(Network_xn)
+loc_xy = matrix(c( 0,0, 1,0, 2,0, 2,-1, 2,1, 1,1, 2,2, 3,1, 3,0, 3,-1, 3,-2), byrow=TRUE, ncol=2, dimnames=list(NULL,c("x","y")) )
+loc_LL = matrix(loc_xy*0.1 + outer(rep(1,nrow(loc_xy)),c(20,40)), ncol=2, dimnames=list(NULL,c("Lon","Lat")))
+xlab <- c(NA, sapply(2:nrow(loc_xy), function(x) mean(c(loc_xy[parent_x[x],'x'],loc_xy[x,'x']))))
+ylab <- c(NA, sapply(2:nrow(loc_xy), function(x) mean(c(loc_xy[parent_x[x],'y'],loc_xy[x,'y']))))
+
+# Distance matrix
+D = array(NA, dim=rep(length(dist_x),2) )
+D[ Network_xn[-1,c("parent_x","child_x")] ] = Network_xn[-1,'dist_x']
+D[ Network_xn[-1,c("child_x","parent_x")] ] = Network_xn[-1,'dist_x']
+Dsparse = as(ifelse(is.na(D),0,D),"dsCMatrix")
+
+sparse_exp = function(A){
+  B = exp(as.matrix(A))
+  B = ifelse( B==1, 0, B )
+  return( as(B,"dsCMatrix") )
+}
+exp_neg_D = sparse_exp(-D)
+
+# Parameter values
+Rho=0.3           # Correlation at distance = 1
+SDmarg=0.3        # Marginal SD of epsilon_b
+theta = -log(Rho)  # Decorrelation rate per distance
+log_mean = 4
+
+# Derived
+SDinput = SDmarg * sqrt(2*theta)
+SDcond = SDmarg * sqrt(1-Rho^2)
+
+# Simulate random effect
+years <- 1:10
+pow = function(a,b) a^b
+Type = function(a) a
+# epsilon_x = rep(NA, length(Obs_i))
+epsilon_yx <- matrix(NA, nrow=length(years), ncol=length(Obs_i))
+# rho_b = SDinput_b = rep(NA, length(Obs_i))
+rho_yb <- SDinput_yb <- matrix(NA, nrow=length(years), ncol=length(Obs_i))
+for(y in 1:length(years)){
+  for( b in 1:length(Obs_i) ){
+    if( is.na(dist_x[b]) || dist_x[b]==Inf ){
+      # Correlation between i and parent(i) as distance -> INF
+      rho_yb[y,b] = 0;
+      # SD of Ornstein-Uhlenbeck process as distance -> INF
+      SDinput_yb[y,b] = SDinput / pow(2*theta, 0.5);
+      # conditional probability
+      epsilon_yx[y,b] = rnorm(n=1, Type(0.0), SDinput_yb[y,b] );
+    }else{
+      # Correlation between i and parent(i)
+      rho_yb[y,b] = exp(-theta * dist_x[b]);
+      # SD of O-U process
+      SDinput_yb[y,b] = pow( pow(SDinput,2)/(2*theta) * (1-exp(-2*theta*dist_x[b])), 0.5 );
+      # conditional probability
+      epsilon_yx[y,b] = rnorm(n=1, rho_yb[y,b]*epsilon_yx[y,parent_x[b]], SDinput_yb[y,b] );
+    }
+  }
+}
+
+# Simulate data
+# lambda_i = exp( epsilon_x + log_mean )
+lambda_yi <- exp(epsilon_yx + log_mean)
+
+## catch
+# catch_i = rpois( n=length(lambda_i), lambda=lambda_i )
+# catch_i[4] = 0
+catch_yi <- t(sapply(1:length(years), function(x) rpois( n = length(lambda_yi[x,]), lambda=lambda_yi[x,])))
+setzero <- sample(1:length(Obs_i), length(years))
+for(y in 1:length(years)){
+  catch_yi[y,setzero[y]] <- 0
+}
+dfcatch <- lapply(1:length(years), function(y){
+  df <- data.frame("year" = years[y], "child_x"=Obs_i, "catch"=catch_yi[y,])
+  return(df)
+})
+dfcatch <- do.call(rbind, dfcatch)
+
+
+## presence/absence
+# pres_i <- sapply(1:length(catch_i), function(x) ifelse(catch_i[x] > 0, 1, 0))
+# dev <- rnorm(length(catch_i), 0, 0.0001)
+# pres_i_dev <- pres_i + dev
+# pres_i_dev[which(pres_i == 0)] <- 0
+pres_yi <- t(sapply(1:length(years), function(y){
+    sapply(1:length(Obs_i), function(x){
+      out <- ifelse(catch_yi[y,x] > 0, 1, 0)
+      return(out)
+    })
+}))
+dev <- matrix(rnorm(length(Obs_i)*length(years), 0, 0.0001), nrow=length(years), ncol=length(Obs_i))
+pres_yi_dev <- pres_yi + dev
+pres_yi_dev[which(pres_yi == 0)] <- 0
+dfpres <- lapply(1:length(years), function(y){
+  df <- data.frame("year" = years[y], "child_x"=Obs_i, "catch"=pres_yi_dev[y,])
+  return(df)
+})
+dfpres <- do.call(rbind, dfpres)
+
+
+dfnet <- cbind.data.frame(Network_xn, loc_LL)
+
+# plotdf <- cbind.data.frame(Network_xn, loc_LL, catch_i, pres_i, pres_i_dev)
+dfnet$Lon2 <- sapply(1:nrow(dfnet), function(x) ifelse(parent_x[x]==0, NA, dfnet$Lon[which(dfnet$child_x == dfnet$parent_x[x])]))
+dfnet$Lat2 <- sapply(1:nrow(dfnet), function(x) ifelse(parent_x[x]==0, NA, dfnet$Lat[which(dfnet$child_x == dfnet$parent_x[x])]))
+
+dfcatch <- inner_join(dfcatch, dfnet)
+dfpres <- inner_join(dfpres, dfnet)
+
+aa <- ggplot(dfnet) +
+    geom_segment(aes(x = Lon,y = Lat,xend = Lon2,yend = Lat2),arrow=arrow()) +
+    # geom_point(aes(x = Lon, y = Lat, color = catch_i), cex=5) +
+    geom_label(aes(x = Lon, y = Lat, label = child_x), fill = "black", color = "white") + #, nudge_x = -0.02) + 
+    # guides(fill = guide_legend(title = "Catch")) +
+    xlab("Longitude") + ylab("Latitude") + 
+    mytheme()
+
+a <- ggplot(dfcatch) +
+    facet_wrap(~year) +
+    geom_segment(aes(x = Lon,y = Lat,xend = Lon2,yend = Lat2),arrow=arrow()) +
+    # geom_point(aes(x = Lon, y = Lat, color = catch_i), cex=5) +
+    geom_label(aes(x = Lon, y = Lat, label = child_x, fill = catch), color = "white") + #, nudge_x = -0.02) + 
+    guides(fill = guide_legend(title = "Catch")) +
+    xlab("Longitude") + ylab("Latitude") + 
+    mytheme()
+
+b <- ggplot(dfpres) +
+    facet_wrap(~year) +
+    geom_segment(aes(x = Lon,y = Lat,xend = Lon2,yend = Lat2),arrow=arrow()) +
+    geom_label(aes(x = Lon, y = Lat, label = child_x, fill = factor(round(catch))), color = "white") + #, nudge_x = -0.02) + 
+    # geom_point(aes(x = Lon, y = Lat, color = factor(pres_i)), cex=5) +
+    guides(fill = guide_legend(title = "Presence")) +
+    xlab("Longitude") + ylab("Latitude") +
+    mytheme()
+```
+
+
+```{r shownetwork, warning=FALSE, echo=FALSE, fig.cap = capFig("Map of the simulated stream network.")}
+aa
+```
+
+
+We assumed catch at each sampling location arose from a Poisson distribution with where lambda was a function of the mean (mu = 4), correlation at distance = 1 (rho = 0.3), marginal standard deviation of the random variation (sigma = 0.3), with normally distributed random variation. 
+
+```{r showcatch, warning=FALSE, echo=FALSE, fig.cap = capFig("Map of the simulated stream network with simulated catches for one year.")}
+a1 <- ggplot(dfcatch %>% filter(year == 1)) +
+      geom_segment(aes(x = Lon, y = Lat, xend = Lon2, yend = Lat2), arrow=arrow()) +
+      geom_label(aes(x = Lon, y = Lat, label = child_x, fill = catch), color = "white") +
+      guides(fill = guide_legend(title = "Catch")) +
+      xlab("Longitude") + ylab("Latitude") + 
+      mytheme()
+a1
+```
+
+
+I repeated the Poisson distribution sampling process over 10 years to generate a time series of catch data over the network.
+
+```{r showcatchtime, warning=FALSE, echo=FALSE, fig.cap = capFig("Map of the simulated stream network with simulated catches over ten years."), fig.height=8, fig.width=10}
+a
+```
+
+We then translated the catch data to encounter data (i.e. presence/absence).
+
+```{r showencountertime, warning=FALSE, echo=FALSE, fig.cap = capFig("Map of the simulated stream network with simulated encounter data over ten years."), fig.height=8, fig.width=10}
+b
+```
+
+
+### Network data
+
+The data required by VAST includes the spatial network of stream segments `network`, where each segment is defined by a child node (upstream node), parent node (downstream node), and the network distance between the two nodes. Any parent nodes that are root nodes, not connected to any further downstream nodes, must be defined as a child node with parent node = 0 and distance to parent = Inf. 
+```{r networksetup, echo=FALSE}
+library(knitr)
+library(kableExtra)
+network <- dfnet %>% select("parent_x","child_x","dist_x","Lon","Lat")
+Network_sz = network %>% rename("parent_s"=parent_x, "child_s"=child_x, "dist_s"=dist_x) %>% select(-c("Lon","Lat"))
+kable(Network_sz, caption = capTab("Setup of simulated stream network.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+### Abundance or biomass observations
+
+The observed data `observations` must be in terms of encounters, catch, or biomass with associated year, latitude, and longitude.
+```{r obs, include=FALSE}
+observations <- dfcatch %>% select("year","catch","Lon","Lat") %>% na.omit()
+```
+
+```{r showobs, echo=FALSE}
+kable(head(observations), caption = capTab("Setup of simulated stream network observations.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+### Running VAST models
+
+There are many decisions to make in running VAST models. First we choose the version and spatial model type. We also indicate the number of nodes and strata limits, although they are not used in this stream network example. 
+```{r settings1}
+Version = "VAST_v5_2_0" 
+Method = "Stream_network"
+n_x = nrow(Network_xn)   # Specify number of stations (a.k.a. "knots")
+strata.limits = data.frame('STRATA'="All_areas")
+```
+
+Field configuration settings in `FieldConfig` turn on or off the spatial and/or spatiotemporal variation in encounter probability (Omega1 and Epsilon1, respectively) and spatial and/or spatiotemporal variation in catch rates (Omega2 and Epsilon2, respectively). Here we have all effects turned on. 
+```{r fieldconfig}
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=1, "Epsilon2"=1)
+```
+
+The `RhoConfig` vector specifies how temporal intercepts (Beta) or spatiotemporal intercepts (Epsilon) are structured. Here we are treating each year as random following an IID distribution. 
+```{r rhoconfig}
+RhoConfig = c("Beta1"=1, "Beta2"=1, "Epsilon1"=1, "Epsilon2"=1)
+```
+
+The `ObsModel` vector specifies the observation model distributions for [1] positive catch rates and [2] functional form for encounter probabilities. In this example we are using catch data in terms of biomass, and thus we can assume a continuous distribution. We are using a gamma distribution to describe positive catch rates and a Poisson-link detla model for the functional form for encounter probabilities. Options for this vector can be found using `?VAST::Data_Fn`.
+```{r obsmodel}
+ObsModel = c("PosDist"=1, "Link"=1)
+```
+
+There are two more optional vectors governing overdispersion `OverdispersionConfig` in [1] encounter probability and [2] positive catch rates and derived values `Options`. There are many derived values with default settings, but for example here we have `Calculate_Range` and `Calculate_effective_area` turned off. 
+```{r overdispersion_and_options}
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options = c("CalculateRange"=0, "Calculate_effective_area"=0)
+```
+
+Now we create the data, extrapolation, and spatial lists to use in VAST. 
+
+```{r createlists, warnings=FALSE, message=FALSE}
+# Load data
+Data_Geostat <- data.frame( "Catch_KG" = observations$catch, 
+              "Year" = observations$year,
+               "Vessel" = "missing", 
+               "AreaSwept_km2" = 1, 
+               "Lat" = observations$Lat, 
+               "Lon" = observations$Lon, 
+               "Pass" = 0)
+
+## network - input grid latitude and longitude by node
+Extrapolation_List = FishStatsUtils::make_extrapolation_info( Region="User", 
+  input_grid=cbind("Lat"=network$Lat, 
+                    "Lon"=network$Lon, 
+                    "Area_km2"=1), 
+                  strata.limits=strata.limits )
+
+## compile the spatial information for the stream network
+Spatial_List = FishStatsUtils::make_spatial_info( n_x=n_x, 
+                          Method=Method, 
+                          Lon_i=Data_Geostat[,'Lon'], 
+                          Lat_i=Data_Geostat[,'Lat'], 
+                          "LAT_intensity"=network$Lat, 
+                          "LON_intensity"=network$Lon, 
+                          Extrapolation_List=Extrapolation_List, 
+                          DirPath=ModFile, 
+                          Save_Results=TRUE )
+
+## Data list with knots
+Data_Geostat = cbind( Data_Geostat, "knot_i"=Spatial_List$knot_i )
+```
+
+`Data_Fn` brings the data and network information together into a list.
+
+```{r data, warnings=FALSE, message=FALSE, results="hide"}
+Data = Data_Fn("Version"=Version, 
+                "FieldConfig"=FieldConfig, 
+                "OverdispersionConfig"=OverdispersionConfig, 
+                "RhoConfig"=RhoConfig, 
+                "ObsModel"=ObsModel, 
+                "c_iz"=rep(0,nrow(Data_Geostat)), 
+                "b_i"=Data_Geostat[,'Catch_KG'], 
+                "a_i"=Data_Geostat[,'AreaSwept_km2'], 
+                "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1, 
+                "s_i"=Data_Geostat[,'knot_i']-1, 
+                "t_iz"=Data_Geostat[,'Year'], 
+                "a_xl"=Spatial_List$a_xl, 
+                "MeshList"=Spatial_List$MeshList, 
+                "GridList"=Spatial_List$GridList, 
+                "Method"=Spatial_List$Method, 
+                "Options"=Options, 
+                "Network_sz"=Network_sz )
+```
+
+`Build_TMB_Fn` compiles the program, makes sure the data is in the right format, and lists which parameters are set as fixed or random effects. The list of parameter names are explained in the documentation accessed via `?VAST::Param_Fn`.
+
+```{r tmb, results="hide", message=FALSE, warning=FALSE}
+TmbList = Build_TMB_Fn("TmbData"=Data, 
+                        "Version"=Version, 
+                        "RhoConfig"=RhoConfig, 
+                        "loc_x"=Spatial_List$loc_x, 
+                        "Method"=Method)
+```
+
+`Obj` represents the model at the initial parameters and is used to start the model run.
+```{r obj, results="hide", message=FALSE, warning=FALSE}
+Obj = TmbList[["Obj"]]
+```
+
+We then use `TMBhelper::Optimize` to minimize the negative log likelihood and estimate the parameters.
+
+```{r optimize, results="hide", message=FALSE, warning=FALSE}
+Opt = TMBhelper::Optimize( obj=Obj, 
+                          lower=TmbList[["Lower"]], 
+                          upper=TmbList[["Upper"]], 
+                          getsd=TRUE,
+                          bias.correct=TRUE, 
+                          bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl"),
+                          newtonsteps=3)
+Report = Obj$report()
+```
+
+
+Once we have a positive definite Hessian matrix, we can check that all parameters have final gradients within +/- 0.0001 and that no parameters are estimated near their bounds. These diagnostics can be found in `Opt$diagnostics`.
+```{r check, echo=FALSE}
+kable(Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')], row.names=FALSE, caption = capTab("Model diagnostics using simulated catch data.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+```{r density, echo=FALSE, message=FALSE, warning=FALSE, fig.cap = capFig("Map of estimated log density at each node, where blue is lower density and red is higher density."), fig.height=6, fig.width=8}
+## Diagnostics for plotting residuals on a map
+# Get region-specific settings for plots
+MapDetails_List = make_map_info( "Region"="Sim", "NN_Extrap"=Spatial_List$PolygonList$NN_Extrap, "Extrapolation_List"=Extrapolation_List )
+
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+## density surface for each year
+Dens_xt = plot_maps(plot_set=c(3), MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=1.5, pch=19, Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), plot_legend_fig=TRUE)
+
+Dens_xt <- as.data.frame(Dens_xt)
+colnames(Dens_xt) = years
+Dens_xt$child_x <- Obs_i
+Dens <- gather(Dens_xt, key="year", value ="log_density", "1":"10")
+Dens$year <- as.numeric(Dens$year)
+dfcatch2 <- full_join(dfcatch, Dens)
+
+dens <- ggplot(dfcatch2) +
+    facet_wrap(~year) +
+    geom_segment(aes(x = Lon,y = Lat,xend = Lon2,yend = Lat2),arrow=arrow()) +
+    # geom_point(aes(x = Lon, y = Lat, color = catch_i), cex=5) +
+    geom_label(aes(x = Lon, y = Lat, label = child_x, fill = log_density), color = "white") + #, nudge_x = -0.02) + 
+    guides(fill = guide_legend(title = "Log density")) +
+    xlab("Longitude") + ylab("Latitude") + 
+    mytheme()
+dens
+```
+
+```{r encounter, echo=FALSE, message=FALSE, warning=FALSE, fig.cap = capFig("Predicted vs. observed encounter probabilities.")}
+Enc_prob = plot_encounter_diagnostic( Report=Report, Data_Geostat=Data_Geostat)
+include_graphics(file.path(getwd(), "Diag--Encounter_prob.png"))
+```
+
+```{r index, echo=FALSE, message=FALSE, warning=FALSE, fig.cap = capFig("Index of abundance.")}
+Index = plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=TRUE )
+include_graphics(file.path(getwd(), "Index-Biomass.png"))
+```
+
+### Encounter observations
+
+Here we test the same simulation model with encounter/non-encounter data. Encounter/non-encounter data records simply 1 (present) or 0 (absent). To use this data with VAST, we add a small random number to the encounter observations. 
+```{r obs2, include=FALSE}
+observations <- dfpres %>% select("year","catch","Lon","Lat") %>% na.omit()
+```
+
+
+```{r showobs2, echo=FALSE}
+kable(head(observations), caption = capTab("Setup of simulated stream network encounter/non-encounter observations.")) %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+With encounter/non-encounter data we turn off the variation in positive catch rates and turn off annual variation in the intercept for positive catch rates.  
+```{r fieldconfig2}
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+```
+
+The `RhoConfig` vector specifies how temporal intercepts (Beta) or spatiotemporal intercepts (Epsilon) are structured. Here we are treating each year as random following an IID distribution. 
+```{r rhoconfig2}
+RhoConfig = c("Beta1"=1, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+```
+
+We then set up the models the same way as with abundance or biomass data.
+```{r runagain, include=FALSE}
+# Load data
+Data_Geostat <- data.frame( "Catch_KG" = observations$catch, 
+              "Year" = observations$year,
+               "Vessel" = "missing", 
+               "AreaSwept_km2" = 1, 
+               "Lat" = observations$Lat, 
+               "Lon" = observations$Lon, 
+               "Pass" = 0)
+
+## network - input grid latitude and longitude by node
+Extrapolation_List = FishStatsUtils::make_extrapolation_info( Region="User", 
+  input_grid=cbind("Lat"=network$Lat, 
+                    "Lon"=network$Lon, 
+                    "Area_km2"=1), 
+                  strata.limits=strata.limits )
+
+## compile the spatial information for the stream network
+Spatial_List = FishStatsUtils::make_spatial_info( n_x=n_x, 
+                          Method=Method, 
+                          Lon_i=Data_Geostat[,'Lon'], 
+                          Lat_i=Data_Geostat[,'Lat'], 
+                          "LAT_intensity"=network$Lat, 
+                          "LON_intensity"=network$Lon, 
+                          Extrapolation_List=Extrapolation_List, 
+                          DirPath=ModFile, 
+                          Save_Results=TRUE )
+
+## Data list with knots
+Data_Geostat = cbind( Data_Geostat, "knot_i"=Spatial_List$knot_i )
+
+Data = Data_Fn("Version"=Version, 
+                "FieldConfig"=FieldConfig, 
+                "OverdispersionConfig"=OverdispersionConfig, 
+                "RhoConfig"=RhoConfig, 
+                "ObsModel"=ObsModel, 
+                "c_iz"=rep(0,nrow(Data_Geostat)), 
+                "b_i"=Data_Geostat[,'Catch_KG'], 
+                "a_i"=Data_Geostat[,'AreaSwept_km2'], 
+                "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1, 
+                "s_i"=Data_Geostat[,'knot_i']-1, 
+                "t_iz"=Data_Geostat[,'Year'], 
+                "a_xl"=Spatial_List$a_xl, 
+                "MeshList"=Spatial_List$MeshList, 
+                "GridList"=Spatial_List$GridList, 
+                "Method"=Spatial_List$Method, 
+                "Options"=Options, 
+                "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, 
+                        "Version"=Version, 
+                        "RhoConfig"=RhoConfig, 
+                        "loc_x"=Spatial_List$loc_x, 
+                        "Method"=Method)
+Obj = TmbList[["Obj"]]
+Opt = tryCatch(TMBhelper::Optimize( obj=Obj, 
+                          lower=TmbList[["Lower"]], 
+                          upper=TmbList[["Upper"]], 
+                          getsd=TRUE,
+                          bias.correct=TRUE, 
+                          bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl"),
+                          newtonsteps=3), error = function(e) NA)
+
+```
+
+```{r display}
+all(is.na(Opt))
+```
+
+
+## References
