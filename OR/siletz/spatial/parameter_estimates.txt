@@ -17,7 +17,7 @@ function gradient
        6        3 
 
 $time_for_MLE
-Time difference of 2.077443 secs
+Time difference of 2.255009 secs
 
 $max_gradient
 [1] 1.551127e-07
@@ -63,8 +63,8 @@ logSigmaM   -0.2443891   0.1445052
 Maximum gradient component: 1.551127e-07 
 
 $time_for_sdreport
-Time difference of 1.035246 mins
+Time difference of 1.307567 mins
 
 $time_for_run
-Time difference of 1.070734 mins
+Time difference of 1.346081 mins
 
