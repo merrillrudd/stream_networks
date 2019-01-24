@@ -33,7 +33,7 @@ capFig = function(x){
 
 This document includes results of testing the VAST stream network spatial model used to account for spatial correlations using network distance within rivers and streams [@hocking_streamnetwork_2018]. The results of simulation testing are presented to compare the use of catch in biomass versus encounter data. 
 
-Case studies explored include 1) coho salmon in the Siletz River in Oregon, USA and 2) longfin eels in the Waitaki River catchment in New Zealand. 
+Initial case studies include 1) coho salmon in the Siletz River in Oregon, USA and 2) longfin eels in the Waitaki River catchment in New Zealand located in respective directories within the `stream_networks` repository. 
 
 ## Simulation
 
