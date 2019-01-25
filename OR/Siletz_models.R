@@ -194,7 +194,7 @@ FishStatsUtils::plot_range_index(Sdreport=Opt[["SD"]], Report=Report, TmbData=Da
 ## try turning on spatiotemporal variation
 #####################################
 spatiotemp_dir <- file.path(sil_dir, "spatiotemporal")
-dir.create(spatiotemp_dir)
+dir.create(spatiotemp_dir, showWarnings=FALSE)
 setwd(spatiotemp_dir)
 
 # save.image("OR_test_spatiotemporal.Rdata")
@@ -202,7 +202,7 @@ setwd(spatiotemp_dir)
 FieldConfig = c("Omega1"="IID", "Epsilon1"="IID", "Omega2"="IID", "Epsilon2"=0)
 RhoConfig = c("Beta1"=2, "Beta2"=2, "Epsilon1"=2, "Epsilon2"=0)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
+Options =  c("Calculate_Range"=1, 
             "Calculate_effective_area"=0)
 ObsModel = c(2,1)
 
@@ -225,6 +225,10 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz )
 
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Map <- TmbList[["Map"]]
+Map$L_epsilon1_z <- factor(c(1, NA))
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "Map"=Map, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+
 Obj = TmbList[["Obj"]]
 
 # Change starting values for kappa - was leading to decorrelation at much smaller distances than the minimum distance between sites
@@ -238,6 +242,8 @@ Obj$gr( Obj$par )
 # Initial run and hessian check
 Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
 H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
+
+Opt1$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 # Re-run from last MLE
 Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=5, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )

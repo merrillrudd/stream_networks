@@ -1,5 +1,5 @@
-setwd("C:\\merrill\\stream_networks\\OR\\test")
-# setwd( "F:/UW Hideaway (SyncBackFree)/Collaborations/2018 -- Rudd stream network/code check 2019-01-24" )
+#setwd("C:\\merrill\\stream_networks\\OR\\test")
+setwd( "F:/UW Hideaway (SyncBackFree)/Collaborations/2018 -- Rudd stream network/code check 2019-01-24" )
 
 library(VAST)
 library(TMB)
@@ -44,7 +44,8 @@ Obj$gr( Obj$par )
 
 # Initial run and hessian check
 Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
-H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
+ParHat1 = Obj$env$parList()
+#H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
 
 ################
 # I see that L_epsilon1_z[2] and L_epsilon2_z[1] and L_epsilon2_z[2] are going to zero, so I turn them off
@@ -71,12 +72,20 @@ Data = Data_Fn("Version"=Version,
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
 Map = TmbList$Map
 Map$L_epsilon1_z = factor( c(1,NA) )
-TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "Map"=Map, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Params = TmbList$Parameters
+Params$L_epsilon1_z[2] = 0
+TmbList = Build_TMB_Fn("TmbData"=Data, "Parameters"=Params, "Version"=Version, "Map"=Map, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
 Obj = TmbList[["Obj"]]
-Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+Obj$par[grep("logkappa",names(Obj$par))]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+# Re-run optimizer
+Opt2 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+ParHat2 = Obj$env$parList()
+H = optimHess( par=Opt2$par, fn=Obj$fn, gr=Obj$gr )
 
 # Re-run from last MLE
-Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=5, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt2$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=5, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
 
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]
