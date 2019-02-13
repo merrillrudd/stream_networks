@@ -7,6 +7,7 @@ rm(list=ls())
 main_dir <- "C:\\merrill\\stream_networks\\OR"
 
 data_dir <- file.path(main_dir, "data")
+data_dir2 <- "C:\\merrill\\StreamUtils\\data"
 
 fig_dir <- file.path(main_dir, "figures")
 dir.create(fig_dir, showWarnings=FALSE)
@@ -33,8 +34,19 @@ library(RuddR)
 
 network <- readRDS(file.path(data_dir, "Siletz_network.rds"))
 obs <- readRDS(file.path(data_dir, "Siletz_observations_density.rds"))
+hab <- readRDS(file.path(data_dir, "Siletz_habitat.rds"))
+
+or_siletz_coho <- list()
+or_siletz_coho$network <- network
+or_siletz_coho$observations <- obs
+or_siletz_coho$habitat <- hab
+save(or_siletz_coho, file=file.path(data_dir2, "or_siletz_coho.rda"))
 
 Network_sz = network %>% select(-c("long","lat"))
+
+# Observations_iy <- inner_join(obs, network %>% select('child_s','dist_s') %>% rename('child_i'=child_s)) %>% rename('dist_i'=dist_s)
+
+category_names <- unique(obs$survey)
 
 ############################################
 ## model - density observations, 2 surveys
@@ -65,14 +77,30 @@ Data_Geostat <- data.frame( "Catch_KG" = obs$density,
                "Pass" = 0,
                "Category" = obs$surveynum)
 
-## include latitude and longitude for user-supplied area
-Extrapolation_List = FishStatsUtils::make_extrapolation_info( Region="User", 
-  input_grid=cbind("Lat"=obs$lat, 
-                    "Lon"=obs$long,
-                    "Area_km2"=1), 
-                  strata.limits=strata.limits )
+# # include latitude and longitude for user-supplied area
+# Extrapolation_List = make_extrapolation_info( Region="Stream", 
+#   stream_info=cbind("Lat"=obs$lat, 
+#                     "Lon"=obs$long,
+#                     "child_i"=obs$child_i,
+#                     "Area_km2"=1), 
+#                   strata.limits=strata.limits )
 
-## change latitude and longitude by node, not using Kmeans
+Extrapolation_List = FishStatsUtils::make_extrapolation_info(Region = "User",
+    input_grid = cbind("Lat"=obs$lat,
+                       "Lon"=obs$long,
+                       "Area_km2"=1),
+    strata.limits = strata.limits)
+
+# Spatial_List = make_spatial_info( n_x=n_x,
+#                           Method=Method, 
+#                           Lon_i=Data_Geostat[,'Lon'], 
+#                           Lat_i=Data_Geostat[,'Lat'], 
+#                           Lat_x=network$lat, 
+#                           Lon_x=network$long, 
+#                           Extrapolation_List=Extrapolation_List, 
+#                           Save_Results=TRUE)
+
+# ## change latitude and longitude by node, not using Kmeans
 Spatial_List = FishStatsUtils::make_spatial_info( n_x=n_x, 
                           Method=Method, 
                           Lon_i=Data_Geostat[,'Lon'], 
@@ -84,6 +112,20 @@ Spatial_List = FishStatsUtils::make_spatial_info( n_x=n_x,
 
 ## add locations to dataset
 Data_Geostat = cbind( Data_Geostat, "knot_i"=Spatial_List$knot_i )
+
+
+## check that assigned node is either parent or child node for stream segment associated with the observation
+check <- correct <- rep(NA, nrow(Data_Geostat))
+for(i in 1:nrow(Data_Geostat)){
+  obs1 <- obs[i,]
+  dat1 <- Data_Geostat[i,]
+  net1 <- network %>% filter(child_s == obs1$child_i)
+  check[i] <- (dat1$knot_i == net1$child_s | dat1$knot_i == net1$parent_s)
+  correct[i] <- dat1$knot_i == obs1$child_i
+}
+all(check)
+length(which(check==TRUE))/length(check)
+length(which(correct==TRUE))/length(correct)
 
 ##################
 ## spatial effect, 2 surveys
@@ -120,10 +162,8 @@ Data = Data_Fn("Version"=Version,
                   "Options"=Options, 
                   "Network_sz"=Network_sz )
 
-category_names <- unique(obs$survey)
 # p1 <- plot_network(Extrapolation_List = Extrapolation_List, Spatial_List = Spatial_List, TmbData=Data, Data_Geostat = Data_Geostat, category_names=category_names, observations=TRUE, arrows=TRUE, root=TRUE, plot_type=1, savedir=NULL)
 # p2 <- plot_network(Extrapolation_List = Extrapolation_List, Spatial_List = Spatial_List, TmbData=Data, Data_Geostat = Data_Geostat, category_names=category_names, observations=TRUE, root=TRUE, plot_type=2)
-
 
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
 Obj = TmbList[["Obj"]]
@@ -138,11 +178,15 @@ Obj$gr( Obj$par )
 
 # Initial run and hessian check
 Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+ParHat1 = Obj$env$parList()
+
 H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
 
 # Re-run from last MLE
 Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
 check <- TMBhelper::Check_Identifiable(Obj)
+
+
 
 Report = Obj$report()
 
@@ -199,12 +243,12 @@ setwd(spatiotemp_dir)
 
 # save.image("OR_test_spatiotemporal.Rdata")
 
-FieldConfig = c("Omega1"="IID", "Epsilon1"="IID", "Omega2"="IID", "Epsilon2"=0)
-RhoConfig = c("Beta1"=2, "Beta2"=2, "Epsilon1"=2, "Epsilon2"=0)
+FieldConfig = c("Omega1"="IID", "Epsilon1"="IID", "Omega2"="IID", "Epsilon2"="IID")
+RhoConfig = c("Beta1"=2, "Beta2"=2, "Epsilon1"=2, "Epsilon2"=2)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=1, 
+Options =  c("Calculate_Range"=0, 
             "Calculate_effective_area"=0)
-ObsModel = c(2,1)
+ObsModel = c(2,0)
 
 Data = Data_Fn("Version"=Version, 
                   "FieldConfig"=FieldConfig, 
@@ -225,10 +269,6 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz )
 
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
-Map <- TmbList[["Map"]]
-Map$L_epsilon1_z <- factor(c(1, NA))
-TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "Map"=Map, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
-
 Obj = TmbList[["Obj"]]
 
 # Change starting values for kappa - was leading to decorrelation at much smaller distances than the minimum distance between sites
@@ -241,12 +281,49 @@ Obj$gr( Obj$par )
 
 # Initial run and hessian check
 Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
-H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
+ParHat1 = Obj$env$parList()
+#H = optimHess( par=Opt1$par, fn=Obj$fn, gr=Obj$gr )
 
-Opt1$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+################
+# I see that L_epsilon1_z[2] and L_epsilon2_z[1] and L_epsilon2_z[2] are going to zero, so I turn them off
+################
+FieldConfig[4] = 0
+RhoConfig[4] = 0
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_i"=as.numeric(Data_Geostat[,"Category"])-1,
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Map = TmbList$Map
+Map$L_epsilon1_z = factor( c(1,NA) )
+Params = TmbList$Parameters
+Params$L_epsilon1_z[2] = 0
+TmbList = Build_TMB_Fn("TmbData"=Data, "Parameters"=Params, "Version"=Version, "Map"=Map, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+# Re-run optimizer
+Opt2 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, savedir=paste0(getwd(),"/"), bias.correct=FALSE, newtonsteps=0, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+ParHat2 = Obj$env$parList()
+H = optimHess( par=Opt2$par, fn=Obj$fn, gr=Obj$gr )
 
 # Re-run from last MLE
-Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=5, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+## may be sensitive to starting values***
+Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt2$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, savedir=paste0(getwd(),"/"), bias.correct=TRUE, newtonsteps=5, bias.correct.control=list(sd=FALSE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
 
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]

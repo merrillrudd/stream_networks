@@ -16,7 +16,7 @@ dir.create(fig_dir, showWarnings=FALSE)
 
 # devtools::install_github("james-thorson/VAST", ref="development")
 library(VAST)
-devtools::install_github("merrillrudd/StreamUtils")
+# devtools::install_github("merrillrudd/StreamUtils")
 library(StreamUtils)
 
 library(TMB)
@@ -34,7 +34,8 @@ nodes <- read.csv(file.path(data_dir, "Siletz", "Nodes_WGS.csv"))
 
 net <- network %>% 
 	select("Shape_Leng", "ChildNode", "ParentNode", "lat", "long") %>%
-	rename("dist_s"="Shape_Leng", "child_s"="ChildNode", "parent_s"="ParentNode")
+	rename("dist_s"="Shape_Leng", "child_s"="ChildNode", "parent_s"="ParentNode") %>%
+	mutate("dist_s" = dist_s / 1000)
 nod <- nodes %>% select("NodeID", "lat", "long")
 
 if(length(net$parent_s %in% net$child_s) > 0){
@@ -51,38 +52,48 @@ if(length(net$parent_s %in% net$child_s) > 0){
 	net_toUse <- net
 }
 
-obs_spawn <- read.csv(file.path(data_dir, "Siletz", "Spawn_Density.csv"))
-obs_juv <- read.csv(file.path(data_dir, "Siletz", "Juv_Density.csv"))
+hab <- read.csv(file.path(data_dir, "Siletz", "Habitat_Siletz_WGS_line_final.csv"))
+# hab2 <- read.csv(file.path(data_dir, "Siletz", "OPcoast_HabitatData.csv")) %>% filter(COHO_POP == "Siletz")
 
-obs_spawn <- obs_spawn %>% 
-		select("SpawningYear", "Adlt.Mi", "lat", "long") %>%
-		rename("year"="SpawningYear", "density"="Adlt.Mi") %>%
-		mutate("density"=density / 1.6) %>%
+juv <- read.csv(file.path(data_dir, "Siletz", "Juvenile_Siletz_WGS_line_final.csv"))
+spawn <- read.csv(file.path(data_dir, "Siletz", "Spawning_Siletz_WGS_line_final.csv"))
+
+
+obs_spawn <- spawn %>% 
+		select("SpawnYear", "adults_per_km", "lat", "long", "ChildNode") %>%
+		rename("year"="SpawnYear", "density"="adults_per_km","child_i"="ChildNode") %>%
 		mutate("survey"="spawners") %>%
 		mutate('surveynum' = 1)
 
-obs_juv <- obs_juv %>%
-		select("Year", "CohoPerKilometer", "lat", "long") %>%
-		rename("year"="Year", "density"="CohoPerKilometer") %>%
+obs_juv <- juv %>%
+		select("JuvYear", "parr_per_k", "lat", "long","ChildNode") %>%
+		rename("year"="JuvYear", "density"="parr_per_k","child_i"="ChildNode") %>%
 		na.omit() %>%
 		mutate("survey"="juveniles") %>% 
 		mutate("surveynum" = 2)
 
-obs_toUse <- rbind.data.frame(obs_spawn, obs_juv)
+obs_hab <- hab %>%
+		select("lat","long","YEAR_", "ChildNode","PCTSCCHNLA","ACW","PCTSWPOOL","POOL1P_KM","POOLS100","RIFFLEDEP","LWDVOL1","WGTED_SLOPE_GRAVEL","WGTED_ALLUNITS_BEDROCK") %>%
+		rename("child_i"="ChildNode", "year"="YEAR_") %>%
+		tidyr::gather(key = "covariate", value = "value", PCTSCCHNLA:WGTED_ALLUNITS_BEDROCK)
 
-years <- unique(obs_toUse$year)[order(unique(obs_toUse$year))]
+obs_dens <- rbind.data.frame(obs_spawn, obs_juv)
+
+years <- unique(obs_dens$year)[order(unique(obs_dens$year))]
 net_byYear <- lapply(1:length(years), function(x){
 	netyr <- data.frame(net_toUse, "year"=years[x])
 	return(netyr)
 })
 net_byYear <- do.call(rbind, net_byYear)
 
-saveRDS(obs_toUse, file.path(data_dir, "Siletz_observations_density.rds"))
+saveRDS(obs_hab, file.path(data_dir, "Siletz_habitat.rds"))
+saveRDS(obs_dens, file.path(data_dir, "Siletz_observations_density.rds"))
 saveRDS(net_toUse, file.path(data_dir, "Siletz_network.rds"))
+write.csv(net_toUse, file.path(data_dir, "Siletz_network.csv"), row.names=FALSE)
 
 
 # or_siletz_coho <- list()
-# or_siletz_coho$observations <- obs_toUse
+# or_siletz_coho$observations <- obs_dens
 # or_siletz_coho$network <- net_toUse
 # save(or_siletz_coho, file=file.path(data_dir2, "or_siletz_coho.rda"))
 
@@ -112,13 +123,18 @@ bb <- ggplot(l2) +
     geom_point(data = l2 %>% filter(parent_s==0), aes(x = long, y = lat), color="goldenrod", cex=5) +
     geom_point(aes(x = long, y = lat), color = "black") +
     geom_segment(aes(x = long2,y = lat2, xend = long, yend = lat), arrow=arrow(length=unit(0.20,"cm"), ends="first", type = "closed"), col="gray", alpha=0.6) +
-    geom_point(data = obs_toUse, aes(x = long, y = lat, fill=survey), pch=22, cex=3) +
+    geom_point(data = obs_dens, aes(x = long, y = lat, fill=survey), pch=22, cex=3) +
     scale_fill_brewer(palette = "Set1")+
     xlab("Longitude") + ylab("Latitude") +  
     mytheme()
 ggsave(file.path(fig_dir, "Network_observations.png"), bb, width=8, height=6)
 
-years <- unique(obs_toUse$year)[order(unique(obs_toUse$year))]
+cc <- aa +
+	geom_point(data = obs_hab, aes(x = long, y = lat, fill = value), cex=3, pch=22) +
+	scale_fill_viridis_c() +
+	facet_wrap(.~covariate)
+
+years <- unique(obs_dens$year)[order(unique(obs_dens$year))]
 net_byYear <- lapply(1:length(years), function(x){
 	netyr <- data.frame(net_toUse, "year"=years[x])
 	return(netyr)
@@ -128,7 +144,7 @@ net_byYear <- do.call(rbind, net_byYear)
 mapbyyr <- ggplot() +
     geom_point(data = l2 %>% filter(parent_s==0), aes(x = long, y = lat), color="goldenrod", cex=5) +
 	geom_point(data=net_byYear, aes(x = long, y = lat)) +
-	geom_point(data=obs_toUse, aes(x = long, y = lat, fill=survey), cex=3, pch=22) +
+	geom_point(data=obs_dens, aes(x = long, y = lat, fill=survey), cex=3, pch=22) +
 	facet_wrap(~year) +
 	scale_fill_brewer(palette = "Set1") +
 	scale_x_continuous(breaks = quantile(net_byYear$long,prob=c(0.1,0.5,0.9)), labels=round(quantile(net_byYear$long,prob=c(0.1,0.5,0.9))[1:3],1)) +
@@ -139,7 +155,7 @@ ggsave(file.path(fig_dir, "Observations_byYear.png"), mapbyyr, width=10, height=
 mapbyyrjuv <- ggplot() +
     geom_point(data = l2 %>% filter(parent_s==0), aes(x = long, y = lat), color="goldenrod", cex=5) +
 	geom_point(data=net_byYear, aes(x = long, y = lat)) +
-	geom_point(data=obs_toUse %>% filter(survey=="juveniles"), aes(x = long, y = lat, size=density), fill=brewer.pal(3,"Set1")[1], pch=22) +
+	geom_point(data=obs_dens %>% filter(survey=="juveniles"), aes(x = long, y = lat, size=density), fill=brewer.pal(3,"Set1")[1], pch=22) +
 	scale_x_continuous(breaks = quantile(net_byYear$long,prob=c(0.1,0.5,0.9)), labels=round(quantile(net_byYear$long,prob=c(0.1,0.5,0.9))[1:3],1)) +
 	facet_wrap(~year) +
 	xlab("Longitude") + ylab("Latitude") +
@@ -149,7 +165,7 @@ ggsave(file.path(fig_dir, "Observations_byYear_juveniles.png"), mapbyyrjuv, widt
 mapbyyrspawn <- ggplot() +
     geom_point(data = l2 %>% filter(parent_s==0), aes(x = long, y = lat), color="goldenrod", cex=5) +
 	geom_point(data=net_byYear, aes(x = long, y = lat), cex=2) +
-	geom_point(data=obs_toUse %>% filter(survey=="spawners"), aes(x = long, y = lat, size=density), fill=brewer.pal(3,"Set1")[2], pch=22) +
+	geom_point(data=obs_dens %>% filter(survey=="spawners"), aes(x = long, y = lat, size=density), fill=brewer.pal(3,"Set1")[2], pch=22) +
 	scale_x_continuous(breaks = quantile(net_byYear$long,prob=c(0.1,0.5,0.9)), labels=round(quantile(net_byYear$long,prob=c(0.1,0.5,0.9))[1:3],1)) +
 	facet_wrap(~year) +
 	xlab("Longitude") + ylab("Latitude") +

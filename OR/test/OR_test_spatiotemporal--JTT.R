@@ -1,5 +1,5 @@
-#setwd("C:\\merrill\\stream_networks\\OR\\test")
-setwd( "F:/UW Hideaway (SyncBackFree)/Collaborations/2018 -- Rudd stream network/code check 2019-01-24" )
+setwd("C:\\merrill\\stream_networks\\OR\\test")
+# setwd( "F:/UW Hideaway (SyncBackFree)/Collaborations/2018 -- Rudd stream network/code check 2019-01-24" )
 
 library(VAST)
 library(TMB)
