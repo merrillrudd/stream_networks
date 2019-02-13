@@ -41,6 +41,8 @@ rsconnect/
 *.Rdata
 *.rds
 *.csv
+*.xlsx
+*.pptx
 *.cpg
 *.dbf
 *.prj
@@ -50,3 +52,5 @@ rsconnect/
 *.xml
 *.shx
 *.ini
+*.accdb
+old/
