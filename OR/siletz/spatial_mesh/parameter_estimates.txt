@@ -1,0 +1,76 @@
+$par
+   ln_H_input    ln_H_input    L_omega1_z    L_omega1_z     logkappa1 
+-0.0004782118  0.2220458031  1.8914074690  6.1367673367 -1.2922055354 
+   logsigmaB1    L_omega2_z    L_omega2_z     logkappa2    logsigmaB2 
+-0.1243211136  0.7750860371  1.3314538630 -0.3167092595 -0.3072844030 
+    logSigmaM     logSigmaM 
+-0.3712191698 -0.4017948044 
+
+$objective
+[1] 2210.466
+attr(,"logarithm")
+[1] TRUE
+
+$iterations
+[1] 3
+
+$evaluations
+function gradient 
+       6        3 
+
+$time_for_MLE
+Time difference of 2.106532 mins
+
+$max_gradient
+[1] 4.399592e-11
+
+$Convergence_check
+[1] "There is no evidence that the model is not converged"
+
+$number_of_coefficients
+ Total  Fixed Random 
+  4160     12   4148 
+
+$AIC
+[1] 4444.931
+attr(,"logarithm")
+[1] TRUE
+
+$diagnostics
+        Param starting_value     Lower           MLE Upper final_gradient
+1  ln_H_input  -0.0004819054      -Inf -0.0004782118   Inf   1.304656e-11
+2  ln_H_input   0.2220447893      -Inf  0.2220458031   Inf  -5.826450e-13
+3  L_omega1_z   1.8914054306      -Inf  1.8914074690   Inf  -3.697043e-13
+4  L_omega1_z   6.1367698935      -Inf  6.1367673367   Inf  -1.110223e-14
+5   logkappa1  -1.2922105892 -2.670632 -1.2922055354    10  -2.476241e-12
+6  logsigmaB1  -0.1243237044      -Inf -0.1243211136   Inf   1.039169e-13
+7  L_omega2_z   0.7750853297      -Inf  0.7750860371   Inf   3.108624e-13
+8  L_omega2_z   1.3314553547      -Inf  1.3314538630   Inf   7.016610e-14
+9   logkappa2  -0.3167067972 -2.670632 -0.3167092595    10   1.612932e-12
+10 logsigmaB2  -0.3072837649      -Inf -0.3072844030   Inf  -1.360023e-15
+11  logSigmaM  -0.3712192842      -Inf -0.3712191698    10   4.399592e-11
+12  logSigmaM  -0.4017944750      -Inf -0.4017948044    10   4.765521e-12
+
+$SD
+sdreport(.) result
+                Estimate Std. Error
+ln_H_input -0.0004782118 0.44145512
+ln_H_input  0.2220458031 0.43897334
+L_omega1_z  1.8914074690 0.61650336
+L_omega1_z  6.1367673367 3.20729817
+logkappa1  -1.2922055354 0.43973680
+logsigmaB1 -0.1243211136 0.36532018
+L_omega2_z  0.7750860371 0.10974500
+L_omega2_z  1.3314538630 0.19147415
+logkappa2  -0.3167092595 0.26493299
+logsigmaB2 -0.3072844030 0.14862675
+logSigmaM  -0.3712191698 0.04956485
+logSigmaM  -0.4017948044 0.11238039
+Maximum gradient component: 4.399592e-11 
+
+$time_for_sdreport
+Time difference of 1.190724 hours
+
+$time_for_run
+Time difference of 1.226268 hours
+
