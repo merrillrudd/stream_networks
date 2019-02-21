@@ -7,7 +7,7 @@ rm(list=ls())
 nz_dir <- "C:\\merrill\\stream_networks\\NZ"
 
 data_dir <- file.path(nz_dir, "data")
-data_dir2 <- file.path("C:\\merrill\\StreamUtils\\data")
+# data_dir2 <- file.path("C:\\merrill\\StreamUtils\\data")
 
 fig_dir <- file.path(nz_dir, "figures")
 dir.create(fig_dir, showWarnings=FALSE)
@@ -16,10 +16,10 @@ dir.create(fig_dir, showWarnings=FALSE)
 ## Packages
 #################
 
-# devtools::install_github("james-thorson/VAST", ref="development")
+devtools::install_github("james-thorson/VAST", ref="development")
 library(VAST)
-# devtools::install_github("merrillrudd/FishStatsUtils")
-library(FishStatsUtils)
+# devtools::install_github("merrillrudd/StreamUtils")
+library(StreamUtils)
 
 library(TMB)
 library(tidyverse)
@@ -35,19 +35,42 @@ library(RuddR)
 load(file.path(data_dir, "REC2.4fromGDB.Rdata"))
 network_raw <- REC2.4fromGDB
 
+# names1 <- colnames(network_raw)
+# write.csv(names1, file.path(data_dir, "Network_REC2.csv"))
+
 network <- network_raw %>%
 	select(c('CatName','nzsegment','fnode','tnode','Shape_Leng', 'upcoordX', 'upcoordY', 'downcoordX', 'downcoordY','NextDownID','Headwater','REC2_TerminalSegment')) %>%
-	rename('parent_s' = tnode, 'child_s' = fnode, 'dist_s'=Shape_Leng, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY, 'segment'=nzsegment, 'NextDownSeg'=NextDownID, 'Headwater'=Headwater)
+	rename('parent_s' = tnode, 'child_s' = fnode, 'dist_s'=Shape_Leng, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY,'NextDownSeg'=NextDownID, 'Headwater'=Headwater)
 
 ## all observations
 load(file.path(data_dir, "Diadromous fish dataset.Rdata"))
 obs_raw <- NZFFD.REC2.Diad.EF
 
+## covariates for longfins
+cov_list <- read.csv(file.path(data_dir, "longfin_covariates.csv"), stringsAsFactors=FALSE)
+covs <- cov_list[,2]
+
+## check that all covariates are in the observation dataset
+all(covs %in% colnames(obs_raw))
+
+## additional data types
+dens_raw <- read.csv(file.path(data_dir, "longfin_density_data.csv"))
+length_raw <- read.csv(file.path(data_dir, "longfin_length_data.csv"))
+age_raw <- read.csv(file.path(data_dir, "Waitaki_aging_data_DONOTPUBLISH.csv"))
+
+# names2 <- colnames(obs_raw)
+# write.csv(names2, file.path(data_dir, "Observations_REC2.csv"))
+
 obs <- obs_raw %>% 
-	select(c('catchname', 'nzsegment', 'angdie', 'upcoordX','downcoordX','upcoordY','downcoordY','y',"Headwater")) %>%
-	rename('catchment'=catchname, 'segment'=nzsegment, 'present'=angdie, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY, 'year'=y,"Headwater"=Headwater) %>%
+	select(c('catchname', 'nzsegment', 'angdie', 'upcoordX','downcoordX','upcoordY','downcoordY','y',"Headwater", covs)) %>%
+	rename('catchment'=catchname, 'present'=angdie, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY, 'year'=y,"Headwater"=Headwater) %>%
 	mutate('year' = as.numeric(as.character(year))) %>%
 	na.omit()
+
+## doesn't have year
+obs_dens <- dens_raw %>%
+	select('nzsegment','fish.m2',"AREA",'east','north') %>%
+	rename('density'='fish.m2', 'Area_m'=AREA, 'easting_child'=east, 'northing_child'=north)
 
 #############################
 ## latitude and longitude
@@ -97,7 +120,7 @@ obs_ll_child <- do.call(rbind, obs_ll_child)
 obs_ll_child <- data.frame(obs_ll_child) %>% dplyr::rename('long_child'=long, 'lat_child'=lat)
 
 obs <- cbind.data.frame(obs, obs_ll_parent, obs_ll_child)
-obs <- obs %>% filter(segment %in% network$segment == TRUE)
+obs <- obs %>% filter(nzsegment %in% network$nzsegment == TRUE)
 
 obsmap <- ggplot() +
 		geom_point(data=network, aes(x = long_child, y = lat_child), col = "black") +
@@ -144,7 +167,7 @@ saveRDS(network_toUse, file.path(data_dir, "NZ_network.rds"))
 
 network_sub <- network %>% filter(grepl("Waitaki", CatName))
 obs_sub <- obs %>% filter(grepl("Waitaki", catchment))
-obs_sub <- obs_sub %>% filter(segment %in% network_sub$segment == TRUE)
+obs_sub <- obs_sub %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
 
 submap <- obsmap +
 		geom_point(data=network_sub, aes(x = long_child, y = lat_child), col="blue") +
@@ -160,7 +183,7 @@ ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
 network_sub_cut <- network_sub %>% 
 			filter(long_parent >= min(c(obs_sub$long_child,obs_sub$long_parent))) %>%
 			filter(lat_parent <= max(c(obs_sub$lat_child,obs_sub$lat_parent)))
-all(obs_sub$segment %in% network_sub_cut$segment)
+all(obs_sub$nzsegment %in% network_sub_cut$nzsegment)
 
 
 #############################

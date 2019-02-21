@@ -16,12 +16,10 @@ dir.create(fig_dir, showWarnings=FALSE)
 #################
 
 devtools::install_github("james-thorson/VAST", ref="development")
-devtools::install_github("merrillrudd/FishStatsUtils")
 devtools::install_github("merrillrudd/RuddR")
 devtools::install_github("merrillrudd/StreamUtils")
 
 library(VAST)
-library(FishStatsUtils)
 library(StreamUtils)
 library(TMB)
 library(tidyverse)
