@@ -241,6 +241,9 @@ obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSe
 			rename('lat'=lat_child, 'long'=long_child) %>%
 			rename('parent_i' = parent_s, 'child_i' = child_s, 'dist_i' = dist_s)
 
+hab_children <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_sub$child_s[x])])
+hab_sub$child_s <- hab_children
+
 obs_list <- NULL
 obs_list$observations <- obs_toUse
 obs_list$habitat <- hab_sub
