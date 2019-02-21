@@ -7,7 +7,7 @@ rm(list=ls())
 nz_dir <- "C:\\merrill\\stream_networks\\NZ"
 
 data_dir <- file.path(nz_dir, "data")
-# data_dir2 <- file.path("C:\\merrill\\StreamUtils\\data")
+data_dir2 <- file.path("C:\\merrill\\StreamUtils\\data")
 
 fig_dir <- file.path(nz_dir, "figures")
 dir.create(fig_dir, showWarnings=FALSE)
@@ -67,10 +67,10 @@ obs <- obs_raw %>%
 	mutate('year' = as.numeric(as.character(year))) %>%
 	na.omit()
 
-## doesn't have year
-obs_dens <- dens_raw %>%
-	select('nzsegment','fish.m2',"AREA",'east','north') %>%
-	rename('density'='fish.m2', 'Area_m'=AREA, 'easting_child'=east, 'northing_child'=north)
+# ## doesn't have year
+# obs_dens <- dens_raw %>%
+# 	select('nzsegment','fish.m2',"AREA",'east','north') %>%
+# 	rename('density'='fish.m2', 'Area_m'=AREA, 'easting_child'=east, 'northing_child'=north)
 
 #############################
 ## latitude and longitude
@@ -151,7 +151,7 @@ network_toUse <- network_reformat %>% select(-c('lat_parent','long_parent','Next
 network_toUse <- rbind.data.frame(network_toUse, unique(root_toUse))
 
 ## observations
-obs_reformat <- inner_join(obs, network) %>% select('parent_s', 'child_s', 'dist_s', 'lat_child', 'long_child', 'lat_parent', 'long_parent', "NextDownSeg", 'present', 'year')
+obs_reformat <- inner_join(obs, network) %>% select(-c('catchment','nzsegment', 'northing_child', 'northing_parent', 'easting_child', 'easting_parent', 'Headwater', 'CatName', 'REC2_TerminalSegment'))
 obs_reformat$present <- sapply(1:nrow(obs_reformat), function(x) ifelse(obs_reformat$present[x]==FALSE, 0, 1))
 
 obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSeg'))%>%
@@ -217,7 +217,7 @@ network_toUse <- network_reformat %>% select(-c('lat_parent','long_parent','Next
 network_toUse <- rbind.data.frame(network_toUse, unique(root_toUse))
 
 ## observations
-obs_reformat <- inner_join(obs_sub, network_sub_cut) %>% select('parent_s', 'child_s', 'dist_s', 'lat_child', 'long_child', 'lat_parent', 'long_parent', "NextDownSeg", 'present', 'year')
+obs_reformat <- inner_join(obs_sub, network_sub_cut) %>% select(-c('catchment','nzsegment', 'northing_child', 'northing_parent', 'easting_child', 'easting_parent', 'Headwater', 'CatName', 'REC2_TerminalSegment'))
 obs_reformat$present <- sapply(1:nrow(obs_reformat), function(x) ifelse(obs_reformat$present[x]==FALSE, 0, 1))
 
 obs_parents <- sapply(1:nrow(obs_reformat), function(x) inodes[which(nodes == obs_reformat$parent_s[x])])
