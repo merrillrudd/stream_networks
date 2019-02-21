@@ -53,6 +53,10 @@ covs <- cov_list[,2]
 ## check that all covariates are in the observation dataset
 all(covs %in% colnames(obs_raw))
 
+hab <- obs_raw %>% 
+		dplyr::select('y', 'nzsegment', covs) %>%
+		tidyr::gather(key = covariate, value = value, us_tmin:Contingency)
+
 ## additional data types
 dens_raw <- read.csv(file.path(data_dir, "longfin_density_data.csv"))
 length_raw <- read.csv(file.path(data_dir, "longfin_length_data.csv"))
@@ -62,7 +66,7 @@ age_raw <- read.csv(file.path(data_dir, "Waitaki_aging_data_DONOTPUBLISH.csv"))
 # write.csv(names2, file.path(data_dir, "Observations_REC2.csv"))
 
 obs <- obs_raw %>% 
-	select(c('catchname', 'nzsegment', 'angdie', 'upcoordX','downcoordX','upcoordY','downcoordY','y',"Headwater", covs)) %>%
+	select(c('catchname', 'nzsegment', 'angdie', 'upcoordX','downcoordX','upcoordY','downcoordY','y',"Headwater")) %>%
 	rename('catchment'=catchname, 'present'=angdie, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY, 'year'=y,"Headwater"=Headwater) %>%
 	mutate('year' = as.numeric(as.character(year))) %>%
 	na.omit()
@@ -158,7 +162,11 @@ obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSe
 			rename('lat'=lat_child, 'long'=long_child) %>%
 			rename('parent_i' = parent_s, 'child_i' = child_s, 'dist_i' = dist_s)
 
-saveRDS(obs_toUse, file.path(data_dir, "NZ_observations_encounters.rds"))
+obs_list <- NULL
+obs_list$observations <- obs_toUse
+obs_list$habitat <- hab
+
+saveRDS(obs_list, file.path(data_dir, "NZ_observations.rds"))
 saveRDS(network_toUse, file.path(data_dir, "NZ_network.rds"))
 
 #############################
@@ -168,6 +176,7 @@ saveRDS(network_toUse, file.path(data_dir, "NZ_network.rds"))
 network_sub <- network %>% filter(grepl("Waitaki", CatName))
 obs_sub <- obs %>% filter(grepl("Waitaki", catchment))
 obs_sub <- obs_sub %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
+hab_sub <- hab %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
 
 submap <- obsmap +
 		geom_point(data=network_sub, aes(x = long_child, y = lat_child), col="blue") +
@@ -229,23 +238,29 @@ obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSe
 			rename('lat'=lat_child, 'long'=long_child) %>%
 			rename('parent_i' = parent_s, 'child_i' = child_s, 'dist_i' = dist_s)
 
-saveRDS(obs_toUse, file.path(data_dir, "Waitaki_observations_encounters.rds"))
+obs_list <- NULL
+obs_list$observations <- obs_toUse
+obs_list$habitat <- hab_sub
+
+saveRDS(obs_list, file.path(data_dir, "Waitaki_observations.rds"))
 saveRDS(network_toUse, file.path(data_dir, "Waitaki_network.rds"))
 
-nz1 <- readRDS(file.path(data_dir, "NZ_observations_encounters.rds"))
-nz2 <- readRDS(file.path(data_dir, "Waitaki_observations_encounters.rds"))
+nz1 <- readRDS(file.path(data_dir, "NZ_observations.rds"))
+nz2 <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 
 nz3 <- readRDS(file.path(data_dir, "NZ_network.rds"))
 nz4 <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
 
 ## save rda
 nz_longfin_eel <- list()
-nz_longfin_eel$observations <- nz1
+nz_longfin_eel$observations <- nz1$observations
+nz_longfin_eel$habitat <- nz1$habitat
 nz_longfin_eel$network <- nz3
 save(nz_longfin_eel, file=file.path(data_dir2, "nz_longfin_eel.rda"))
 
 nz_waitaki_longfin_eel <- list()
-nz_waitaki_longfin_eel$observations <- nz2
+nz_waitaki_longfin_eel$observations <- nz2$observations
+nz_waitaki_longfin_eel$habitat <- nz2$habitat
 nz_waitaki_longfin_eel$network <- nz4
 save(nz_waitaki_longfin_eel, file=file.path(data_dir2, "nz_waitaki_longfin_eel.rda"))
 
