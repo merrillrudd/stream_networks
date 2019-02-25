@@ -145,11 +145,11 @@ network_ll_child <- data.frame(network_ll_child) %>% dplyr::rename('long_child'=
 network <- cbind.data.frame(network, network_ll_parent, network_ll_child)
 network <- network %>% filter(lat_child > -50)
 
-# nzmap <- ggplot(network) +
-# 		geom_point(aes(x = long_child, y = lat_child)) +
-# 		xlab("Longitude") + ylab("Latitude") +
-# 		mytheme()
-# ggsave(file.path(fig_dir, "NZmap.png"), nzmap)
+nzmap <- ggplot(network) +
+		geom_point(aes(x = long_child, y = lat_child)) +
+		xlab("Longitude") + ylab("Latitude") +
+		mytheme()
+ggsave(file.path(fig_dir, "NZmap.png"), nzmap)
 
 ## observations
 obs_ll_parent <- lapply(1:nrow(obs_all), function(x){
@@ -168,11 +168,11 @@ obs_ll_child <- data.frame(obs_ll_child) %>% dplyr::rename('long_child'=long, 'l
 obs_all <- cbind.data.frame(obs_all, obs_ll_parent, obs_ll_child)
 obs_all <- obs_all %>% filter(nzsegment %in% network$nzsegment == TRUE)
 
-# obsmap <- ggplot() +
-# 		geom_point(data=network, aes(x = long_child, y = lat_child), col = "black") +
-# 		geom_point(data=obs, aes(x = long_child, y = lat_child), col = "red") +
-# 		xlab("Longitude") + ylab("Latitude") +
-# 		mytheme()
+obsmap <- ggplot() +
+		geom_point(data=network, aes(x = long_child, y = lat_child), col = "black") +
+		geom_point(data=obs_all %>% filter(data_type=="encounter"), aes(x = long_child, y = lat_child), col = "red") +
+		xlab("Longitude") + ylab("Latitude") +
+		mytheme()
 # ggsave(file.path(fig_dir, "NZmap_obs.png"), obsmap)
 
 #############################
@@ -224,21 +224,21 @@ obs_sub <- obs_all %>% filter(grepl("Waitaki", catchment))
 obs_sub <- obs_sub %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
 hab_sub <- hab %>% filter(child_s %in% network_sub$child_s == TRUE)
 
-# submap <- obsmap +
-# 		geom_point(data=network_sub, aes(x = long_child, y = lat_child), col="blue") +
-# 		geom_point(data=obs_sub, aes(x = long_child, y = lat_child), col = "yellow")
+submap <- obsmap +
+		geom_point(data=network_sub, aes(x = long_child, y = lat_child), col="blue") +
+		geom_point(data=obs_sub, aes(x = long_child, y = lat_child), col = "yellow")
 
-# catchmap <- ggplot() +
-# 		geom_point(data=network_sub, aes(x = long_child, y = lat_child), col="black") +
-# 		geom_point(data=obs_sub, aes(x = long_child, y = lat_child), col = "red") +
-# 		xlab("Longitude") + ylab("Latitude") +
-# 		mytheme()
+catchmap <- ggplot() +
+		geom_point(data=network_sub, aes(x = long_child, y = lat_child), col="black") +
+		geom_point(data=obs_sub, aes(x = long_child, y = lat_child), col = "red") +
+		xlab("Longitude") + ylab("Latitude") +
+		mytheme()
 # ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
 
-network_sub_cut <- network_sub %>% 
-			filter(long_parent >= min(c(obs_sub$long_child,obs_sub$long_parent))) %>%
-			filter(lat_parent <= max(c(obs_sub$lat_child,obs_sub$lat_parent)))
-all(obs_sub$nzsegment %in% network_sub_cut$nzsegment)
+# network_sub_cut <- network_sub %>% 
+# 			filter(long_parent >= min(c(obs_sub$long_child,obs_sub$long_parent))) %>%
+# 			filter(lat_parent <= max(c(obs_sub$lat_child,obs_sub$lat_parent)))
+# all(obs_sub$nzsegment %in% network_sub_cut$nzsegment)
 
 
 #############################

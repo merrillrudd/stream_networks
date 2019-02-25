@@ -32,13 +32,12 @@ library(RuddR)
 data <- data("nz_waitaki_longfin_eel", package="StreamUtils")
 
 network <- nz_waitaki_longfin_eel[["network"]]
-obs <- nz_waitaki_longfin_eel[["observations"]]
+obs <- nz_waitaki_longfin_eel[["observations"]] %>%
+    dplyr::filter(data_type=="encounter") %>%
+    select(-data_type) %>%
+    rename('present' = data_value)
 
 Network_sz = network %>% select(-c("long","lat"))
-
-
-Network_sz$dist_s <- Network_sz$dist_s/1000
-obs$dist_i <- obs$dist_i/1000
 
 ##################################
 ## model - encounter observations
