@@ -32,10 +32,7 @@ library(RuddR)
 data <- data("nz_waitaki_longfin_eel", package="StreamUtils")
 
 network <- nz_waitaki_longfin_eel[["network"]]
-obs <- nz_waitaki_longfin_eel[["observations"]] %>%
-    dplyr::filter(data_type=="encounter") %>%
-    select(-data_type) %>%
-    rename('present' = data_value)
+obs <- nz_waitaki_longfin_eel[["observations"]]
 
 Network_sz = network %>% select(-c("long","lat"))
 
