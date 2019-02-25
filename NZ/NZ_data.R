@@ -239,7 +239,7 @@ catchmap <- ggplot() +
 # 			filter(long_parent >= min(c(obs_sub$long_child,obs_sub$long_parent))) %>%
 # 			filter(lat_parent <= max(c(obs_sub$lat_child,obs_sub$lat_parent)))
 # all(obs_sub$nzsegment %in% network_sub_cut$nzsegment)
-
+network_sub_cut <- network_sub
 
 #############################
 ## format
