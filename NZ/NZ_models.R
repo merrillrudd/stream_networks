@@ -128,6 +128,9 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz,
                   "CheckForErrors"=FALSE )
 
+plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=FALSE, root=FALSE, savedir=NULL, cex=0.2)
+
+
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
 Obj = TmbList[["Obj"]]
 
@@ -445,6 +448,8 @@ AIC_list$spatiotemporal_gamma <- as.numeric(Opt$AIC)
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
 saveRDS(Save, file.path(getwd(),"Save.rds"))
+Save <- readRDS(file.path(nz_enc_dir, "spatiotemporal_gamma", "Save.rds"))
+AIC_list$spatiotemporal_gamma <- as.numeric(Save$Opt$AIC)
 
 ## diagnostics for encounter probability component
 Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
@@ -512,7 +517,7 @@ Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Up
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 Opt[["SD"]]
-AIC_list$spatiotemporal_gamma <- as.numeric(Opt$AIC)
+AIC_list$spatiotemporal_spatial_gamma <- as.numeric(Opt$AIC)
 
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
@@ -539,3 +544,15 @@ Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatia
 
 # ## index of abundance
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+
+models <- c("temporal_gamma", "temporal_lognormal", "spatial_gamma", "spatial_lognormal", "spatiotemporal_gamma", "spatiotemporal_spatial_gamma")
+AIC <- lapply(1:length(models), function(x){
+  res <- readRDS(file.path(nz_enc_dir, models[x], "Save.rds"))
+  aic <- as.numeric(res$Opt$AIC)
+  if(length(aic)==0) aic <- as.numeric(res$Opt$opt$AIC)
+  if(length(aic)>0) df <- data.frame("model"=models[x], "AIC"=aic)
+  return(df)
+})
+AIC <- do.call(rbind, AIC)
+AIC <- AIC %>% mutate(dAIC = AIC - min(AIC))

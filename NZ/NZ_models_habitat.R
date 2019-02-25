@@ -157,12 +157,80 @@ space_dir <- file.path(nz_enc_dir, "spatial_gamma_habitat")
 dir.create(space_dir)
 setwd(space_dir)
 
-FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
-RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=3, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
 Options =  c("Calculate_Range"=0, 
             "Calculate_effective_area"=0)
 ObsModel = c(2,0)
+
+new_dir <- file.path(space_dir, "all")
+dir.create(new_dir, showWarnings=FALSE)
+setwd(new_dir)
+
+  Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "X_xtp"=X_xtp,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz,
+                  "CheckForErrors"=FALSE )
+
+  TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+  Obj = TmbList[["Obj"]]
+  Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s'])) 
+
+  Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+  check <- TMBhelper::Check_Identifiable(Obj) 
+
+  Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+  
+  if(all(is.na(Opt))==FALSE){
+    AIC_list[[p]] <- as.numeric(Opt$AIC)  
+
+    #############
+    Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]   
+
+    Opt[["SD"]]   
+
+    Report <- Obj$report()  
+    Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+    saveRDS(Save, file.path(getwd(),"Save.rds"))  
+
+    ## diagnostics for encounter probability component
+    Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)    
+
+    ## diagnostics for positive catch rate component
+    Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::    
+
+    ## Plot Pearson residuals
+    StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )    
+
+    # ## index of abundance
+    # Decide which years to plot                                                   
+    Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+    Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))   
+
+    ##### Model output
+    ## density surface for each year
+    Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+    Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)   
+
+    # ## index of abundance
+    Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
 
 for(p in 1:n_p){
   new_dir <- file.path(space_dir, covar_toUse[p])
