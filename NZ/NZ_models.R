@@ -39,10 +39,6 @@ obs <- nz_waitaki_longfin_eel[["observations"]] %>%
 
 Network_sz = network %>% select(-c("long","lat"))
 
-
-Network_sz$dist_s <- Network_sz$dist_s/1000
-obs$dist_i <- obs$dist_i/1000
-
 ##################################
 ## model - encounter observations
 ##################################
