@@ -39,10 +39,88 @@ obs <- nz_waitaki_longfin_eel[["observations"]] %>%
 
 Network_sz = network %>% select(-c("long","lat"))
 
+p1 <- ggplot() +
+  geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.2, alpha=0.2) +
+  geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
+  mytheme()
+
+### prune upstream segments
+## do not automatically include observed segment and then make sure it still shows up on network when tracing the upstream and downstream segments from the observed segment
+## start from observation
+obs_child <- unique(obs$child_i)
+
+finddown <- lapply(1:length(obs_child), function(x){
+  net_obs <- network %>% filter(child_s %in% obs_child[x])
+  nextdown <- network %>% filter(child_s == net_obs$parent_s)
+  save <- rbind.data.frame(net_obs,nextdown)
+  for(i in 1:200){
+    nextdown <- network %>% filter(child_s == nextdown$parent_s)
+    save <- rbind.data.frame(save, nextdown)
+    if(any(save$parent_s == 0)) break
+  }
+  return(save) 
+})
+check1 <- sapply(1:length(finddown), function(x) nrow(finddown[[x]]))
+check2 <- sapply(1:length(finddown), function(x) any(finddown[[x]]$parent_s == 0))
+prunedown <- do.call(rbind, finddown)
+prunedown2 <- unique(prunedown)
+
+# findup <- lapply(1:length(obs_child), function(x){
+#   net_obs <- network %>% filter(child_s %in% obs_child[x])
+#   nextup <- network %>% filter(parent_s == net_obs$child_s)
+#   save <- rbind.data.frame(net_obs, nextup)
+#   for(i in 1:100){
+#     nextup <- network %>% filter(parent_s %in% nextup$child_s)
+#     save <- rbind.data.frame(save, nextup)
+#   }
+#   return(save)
+# })
+# pruneup <- do.call(rbind, findup)
+# pruneup2 <- unique(pruneup)
+# head_children <- network$child_s[which(network$child_s %in% network$parent_s ==FALSE)]
+# all(head_children %in% pruneup2$child_s)
+# length(which(head_children %in% pruneup2$child_s))/length(head_children)
+
+p1 <- ggplot() +
+  geom_point(data = prunedown2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
+  # geom_point(data = pruneup2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
+  geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
+  mytheme()
+
+network2 <- rbind.data.frame(prunedown2)#, pruneup2)
+
+## rename nodes
+nodes <- unique(c(network2$child_s, network2$parent_s))
+inodes <- seq_along(nodes)
+
+net_parents <- sapply(1:nrow(network2), function(x){
+  if(network2$parent_s[x] != 0) new_node <- inodes[which(nodes == network2$parent_s[x])]
+  if(network2$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+net_children <- sapply(1:nrow(network2), function(x) inodes[which(nodes == network2$child_s[x])])
+
+network_toUse <- network2
+network_toUse$parent_s <- net_parents
+network_toUse$child_s <- net_children
+
+obs_parents <- sapply(1:nrow(obs), function(x){
+  if(obs$parent_i[x] != 0) new_node <- inodes[which(nodes == obs$parent_i[x])]
+  if(obs$parent_i[x] == 0) new_node <- 0
+  return(new_node)  
+})
+obs_children <- sapply(1:nrow(obs), function(x) inodes[which(nodes == obs$child_i[x])])
+
+obs_toUse <- obs
+obs_toUse$parent_i <- obs_parents
+obs_toUse$child_i <- obs_children
+Network_sz <- network_toUse %>% select(-c("long", "lat"))
+
+
 ##################################
 ## model - encounter observations
 ##################################
-nz_enc_dir <- file.path(nz_dir, "waitaki_encounters")
+nz_enc_dir <- file.path(nz_dir, "waitaki_encounters_DownstreamOnly")
 dir.create(nz_enc_dir, showWarnings=FALSE)
 setwd(nz_enc_dir)
 
@@ -56,28 +134,28 @@ n_x = nrow(network)   # Specify number of stations (a.k.a. "knots")
 strata.limits <- data.frame('STRATA'="All_areas")
 
 ##### add small value to encounter observations
-present <- obs$present
+present <- obs_toUse$present
 devs <- rnorm(length(present), 0, 0.01)
 present_new <- sapply(1:length(present), function(x) ifelse(present[x]==1, present[x]+devs[x], present[x]))
-obs$present <- present_new
+obs_toUse$present <- present_new
 
 ##### setup data frame
 Data_Geostat <- data.frame( "Catch_KG" = present_new, 
-              "Year" = obs$year,
+              "Year" = obs_toUse$year,
                "Vessel" = "missing", 
-               "AreaSwept_km2" = 1, 
-               "Lat" = obs$lat, 
-               "Lon" = obs$long, 
+               "AreaSwept_km2" = obs_toUse$dist_i, 
+               "Lat" = obs_toUse$lat, 
+               "Lon" = obs_toUse$long, 
                "Pass" = 0,
                "Category" = "Longfin_eels")
 
 
 ## include latitude and longitude for user-supplied area
 Extrapolation_List = StreamUtils::make_extrapolation_info( Region="Stream", 
-  stream_info=cbind("Lat"=obs$lat, 
-                    "Lon"=obs$long,
-                    "child_i"=obs$child_i,
-                    "Area_km2"=obs$dist_i), 
+  stream_info=cbind("Lat"=obs_toUse$lat, 
+                    "Lon"=obs_toUse$long,
+                    "child_i"=obs_toUse$child_i,
+                    "Area_km2"=obs_toUse$dist_i), 
                   strata.limits=strata.limits )
 
 ## change latitude and longitude by node, not using Kmeans
@@ -85,12 +163,13 @@ Spatial_List = StreamUtils::make_spatial_info( n_x=n_x,
                           Method=Method, 
                           Lon_i=Data_Geostat[,'Lon'], 
                           Lat_i=Data_Geostat[,'Lat'], 
-                          Lat_x=network$lat, 
-                          Lon_x=network$long, 
+                          Lat_x=network_toUse$lat, 
+                          Lon_x=network_toUse$long, 
                           Extrapolation_List=Extrapolation_List )
 
 ## add locations to dataset
 Data_Geostat = cbind( Data_Geostat, "knot_i"=Spatial_List$knot_i )
+
 
 ########################
 ## TEMPORAL GAMMA
@@ -118,8 +197,6 @@ Data = Data_Fn("Version"=Version,
                   "s_i"=Data_Geostat[,'knot_i']-1,
                   "t_iz"=Data_Geostat[,'Year'],
                   "a_xl"=Spatial_List$a_xl,
-                  # "X_xtp"=X_xtp_inp,
-                  # "Xconfig_zcp"=Xconfig_zcp,
                   "MeshList"=Spatial_List$MeshList,
                   "GridList"=Spatial_List$GridList,
                   "Method"=Spatial_List$Method,
@@ -127,7 +204,7 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz,
                   "CheckForErrors"=FALSE )
 
-plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=FALSE, root=FALSE, savedir=NULL, cex=0.2)
+plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=TRUE, root=FALSE, savedir=NULL, cex=0.2)
 
 
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
@@ -147,8 +224,6 @@ saveRDS(Save, file.path(getwd(),"Save.rds"))
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]
 AIC_list$temporal_gamma <- as.numeric(Opt$AIC)
-
-plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=FALSE, root=FALSE)
 
 ## diagnostics for encounter probability component
 Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
@@ -226,8 +301,6 @@ Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]
 AIC_list$temporal_lognormal <- as.numeric(Opt$AIC)
 
-plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=FALSE, root=FALSE)
-
 ## diagnostics for encounter probability component
 Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
 
@@ -254,7 +327,7 @@ Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set
 ##################
 ## SPATIAL GAMMA
 ##################
-space_dir <- file.path(nz_enc_dir, "spatial_gamma")
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_gamma")
 dir.create(space_dir)
 setwd(space_dir)
 
@@ -296,7 +369,7 @@ Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Up
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 Opt[["SD"]]
-AIC_list$spatial_gamma <- as.numeric(Opt$AIC)
+AIC_list$spatial_temporal_gamma <- as.numeric(Opt$AIC)
 
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
@@ -327,7 +400,7 @@ Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set
 ##################
 ## SPATIAL LOGNORMAL
 ##################
-space_dir <- file.path(nz_enc_dir, "spatial_lognormal")
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_lognormal")
 dir.create(space_dir)
 setwd(space_dir)
 
@@ -369,7 +442,7 @@ Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Up
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 Opt[["SD"]]
-AIC_list$spatial_lognormal <- as.numeric(Opt$AIC)
+AIC_list$spatial_temporal_lognormal <- as.numeric(Opt$AIC)
 
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
