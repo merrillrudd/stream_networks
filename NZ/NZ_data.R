@@ -39,9 +39,10 @@ network_raw <- REC2.4fromGDB
 # write.csv(names1, file.path(data_dir, "Network_REC2.csv"))
 
 network <- network_raw %>%
-	select(c('CatName','nzsegment','fnode','tnode','Shape_Leng', 'upcoordX', 'upcoordY', 'downcoordX', 'downcoordY','NextDownID','Headwater','REC2_TerminalSegment')) %>%
+	select(c('CatName','nzsegment','fnode','tnode','Shape_Leng', 'upcoordX', 'upcoordY', 'downcoordX', 'downcoordY','NextDownID','Headwater','REC2_TerminalSegment','Dist2Coast_FromBottom',"Q50Cumecs","Q5_normCumecs")) %>%
 	rename('parent_s' = tnode, 'child_s' = fnode, 'dist_s'=Shape_Leng, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY,'NextDownSeg'=NextDownID, 'Headwater'=Headwater) %>%
 	mutate('dist_s' = dist_s / 1000)
+
 
 ## all observations
 load(file.path(data_dir, "Diadromous fish dataset.Rdata"))
@@ -51,15 +52,32 @@ obs_raw <- NZFFD.REC2.Diad.EF
 cov_list <- read.csv(file.path(data_dir, "longfin_covariates.csv"), stringsAsFactors=FALSE)
 covs <- cov_list[,2]
 
-## check that all covariates are in the observation dataset
-all(covs %in% colnames(obs_raw))
-
 hab <- obs_raw %>% 
 		dplyr::select('y', 'nzsegment', covs) %>%
 		tidyr::gather(key = covariate, value = value, us_tmin:Contingency) %>%
 		left_join(network, by = 'nzsegment') %>%
 		select('y', 'child_s', 'covariate', 'value') %>%
 		rename('year'=y)
+
+# p <- ggplot(network %>% filter(grepl("Waitaki",CatName))) +
+# 	geom_point(aes(x = northing_child, y = easting_child, color = Dist2Coast_FromBottom)) +
+# 	mytheme()
+
+# p <- ggplot(network %>% filter(grepl("Waitaki",CatName))) +
+# 	geom_point(aes(x = northing_child, y = easting_child, color = Q50Cumecs)) +
+# 	mytheme()
+
+# p <- ggplot(network %>% filter(grepl("Waitaki",CatName))) +
+# 	geom_point(aes(x = northing_child, y = easting_child, color = Q5_normCumecs)) +
+# 	mytheme()
+
+
+# cont <- hab %>% filter(covariate == "Contingency") %>% group_by(child_s) %>% summarise("med_value"=median(value))
+# cont2 <- inner_join(network, cont)
+
+# p <- ggplot(cont2 %>% filter(grepl("Waitaki",CatName))) +
+# 	geom_point(aes(x = northing_child, y = easting_child, color = med_value)) +
+# 	mytheme()
 
 ## additional data types
 dens_raw <- read.csv(file.path(data_dir, "longfin_density_data.csv"))

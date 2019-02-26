@@ -36,6 +36,7 @@ obs <- nz_waitaki_longfin_eel[["observations"]] %>%
     dplyr::filter(data_type=="encounter") %>%
     select(-data_type) %>%
     rename('present' = data_value)
+hab <- nz_waitaki_longfin_eel[["habitat"]]
 
 Network_sz = network %>% select(-c("long","lat"))
 
@@ -81,13 +82,16 @@ prunedown2 <- unique(prunedown)
 # all(head_children %in% pruneup2$child_s)
 # length(which(head_children %in% pruneup2$child_s))/length(head_children)
 
-p1 <- ggplot() +
+p2 <- ggplot() +
   geom_point(data = prunedown2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
   # geom_point(data = pruneup2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
   geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
   mytheme()
 
 network2 <- rbind.data.frame(prunedown2)#, pruneup2)
+
+hab2 <- hab %>% filter(child_s %in% network2$child_s)
+
 
 ## rename nodes
 nodes <- unique(c(network2$child_s, network2$parent_s))
@@ -115,6 +119,86 @@ obs_toUse <- obs
 obs_toUse$parent_i <- obs_parents
 obs_toUse$child_i <- obs_children
 
+hab_children <- sapply(1:nrow(hab2), function(x) inodes[which(nodes == hab2$child_s[x])])
+hab_toUse <- hab
+hab_toUse$child_s <- hab_children
+
+
+####################################
+## habitat information
+## treated as density covariates
+###################################
+
+nodes <- network_toUse$child_s[order(network_toUse$child_s)]
+years <- min(obs_toUse$year):max(obs_toUse$year)
+covar <- unique(hab_toUse$covariate)
+
+df <- lapply(1:length(covar), function(x){
+  sub <- hab_toUse %>% filter(covariate == covar[x])
+  df <- data.frame(sub$value)
+  return(df)
+})
+df <- do.call(cbind, df)
+colnames(df) <- covar
+
+df2 <- cor(df)
+panel.cor <- function(x, y, ...){
+  par(usr = c(0, 1, 0, 1))
+  txt <- as.character(format(cor(x, y), digits=2))
+  text(0.5, 0.5, txt, cex = 6* abs(cor(x, y)))
+}
+pairs(df, upper.panel=panel.cor)
+
+# df2 = cor(df)
+# fc <- findCorrelation(df2, cutoff=0.5) # 
+# fc <- sort(fc)
+# reduced_Data = df[,-c(fc)]
+# pairs(reduced_Data, upper.panel=panel.cor)
+
+covar_toUse <- colnames(df)
+# hab_toUse <- hab %>% filter(covariate %in% covar_toUse)
+
+n_t <- length(years)
+n_x <- length(nodes)
+n_p <- length(covar_toUse)
+X_xtp <- array(0, dim=c(n_x,n_t,n_p))
+for(p in 1:n_p){
+    psub <- hab_toUse %>% filter(covariate == covar_toUse[p])
+    mat <- matrix(NA, nrow=n_x, ncol=n_t)
+    for(t in 1:n_t){
+      tsub <- psub %>% filter(year==years[t])
+      mat[tsub$child_s,t] <- tsub$value
+    }
+    mat_std <- (mat - mean(mat, na.rm=TRUE))/sd(mat, na.rm=TRUE)
+    for(t in 1:n_t){
+      sub <- mat_std[,t]
+      sub[which(is.na(sub))] <- 0
+      mat_std[,t] <- sub
+    }
+    X_xtp[,,p] <- mat_std
+}
+
+X_x1p <- array(0, dim=c(n_x, n_t, n_p))
+hab_oneyear <- hab_toUse %>% group_by(child_s, covariate) %>% summarise('med_value'=median(value))
+for(p in 1:n_p){
+  psub <- hab_oneyear %>% filter(covariate == covar_toUse[p])
+  mat <- matrix(0, nrow=n_x, ncol = 1)
+  mat[psub$child_s,1] <- psub$med_value
+  mat_sd <- (mat - mean(mat, na.rm=TRUE))/sd(mat, na.rm=TRUE)
+  X_x1p[,,p] <- mat_sd
+}
+
+
+hab_toPlot <- inner_join(network_toUse, hab_oneyear)
+
+for(i in 1:length(covar_toUse)){
+  p <- ggplot(hab_toPlot %>% filter(covariate == covar_toUse[i])) +
+  geom_point(aes(x = long, y = lat, color = med_value)) +
+  guides(color=guide_legend(title=covar_toUse[i])) +
+  mytheme()
+  dev.new()
+  print(p)
+}
 
 ##################################
 ## model - encounter observations
@@ -125,9 +209,9 @@ setwd(nz_enc_dir)
 
 saveRDS(obs_toUse, file.path(nz_enc_dir, "observations.rds"))
 saveRDS(network_toUse, file.path(nz_enc_dir, "network.rds"))
+saveRDS(hab_toUse, file.path(nz_enc_dir, "habitat.rds"))
 
 Network_sz <- network_toUse %>% select(-c("long", "lat"))
-
 
 AIC_list <- NULL
 
@@ -476,6 +560,82 @@ Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatia
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
 
 
+##################
+## SPATIAL LOGNORMAL HABITAT
+##################
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_lognormal_habitat")
+dir.create(space_dir)
+setwd(space_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=0, 
+            "Calculate_effective_area"=0)
+ObsModel = c(1,0)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "X_xtp" = array(X_xtp[,,5], dim=c(n_x,n_t,1)),
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatial_temporal_lognormal_hab1 <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+
+
 #####################
 ## spatiotemporal
 st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_lognormal")
@@ -547,6 +707,85 @@ Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatia
 
 # ## index of abundance
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+
+
+
+#####################
+## spatiotemporal
+st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_lognormal_habitat")
+dir.create(st_dir)
+setwd(st_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=2, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=0, 
+            "Calculate_effective_area"=0)
+ObsModel = c(2,0)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "X_xtp"=array(X_xtp[,,5], dim=c(n_x,n_t,1)),
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatiotemporal_spatial_lognormal_hab1 <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+
+
 
 
 models <- c("temporal_gamma", "temporal_lognormal", "spatial_gamma", "spatial_lognormal", "spatiotemporal_gamma", "spatiotemporal_spatial_gamma")

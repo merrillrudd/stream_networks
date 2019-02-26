@@ -65,29 +65,29 @@ check2 <- sapply(1:length(finddown), function(x) any(finddown[[x]]$parent_s == 0
 prunedown <- do.call(rbind, finddown)
 prunedown2 <- unique(prunedown)
 
-# findup <- lapply(1:length(obs_child), function(x){
-#   net_obs <- network %>% filter(child_s %in% obs_child[x])
-#   nextup <- network %>% filter(parent_s == net_obs$child_s)
-#   save <- rbind.data.frame(net_obs, nextup)
-#   for(i in 1:100){
-#     nextup <- network %>% filter(parent_s %in% nextup$child_s)
-#     save <- rbind.data.frame(save, nextup)
-#   }
-#   return(save)
-# })
-# pruneup <- do.call(rbind, findup)
-# pruneup2 <- unique(pruneup)
-# head_children <- network$child_s[which(network$child_s %in% network$parent_s ==FALSE)]
-# all(head_children %in% pruneup2$child_s)
-# length(which(head_children %in% pruneup2$child_s))/length(head_children)
+findup <- lapply(1:length(obs_child), function(x){
+  net_obs <- network %>% filter(child_s %in% obs_child[x])
+  nextup <- network %>% filter(parent_s == net_obs$child_s)
+  save <- rbind.data.frame(net_obs, nextup)
+  for(i in 1:100){
+    nextup <- network %>% filter(parent_s %in% nextup$child_s)
+    save <- rbind.data.frame(save, nextup)
+  }
+  return(save)
+})
+pruneup <- do.call(rbind, findup)
+pruneup2 <- unique(pruneup)
+head_children <- network$child_s[which(network$child_s %in% network$parent_s ==FALSE)]
+all(head_children %in% pruneup2$child_s)
+length(which(head_children %in% pruneup2$child_s))/length(head_children)
 
 p1 <- ggplot() +
   geom_point(data = prunedown2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
-  # geom_point(data = pruneup2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
+  geom_point(data = pruneup2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
   geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
   mytheme()
 
-network2 <- rbind.data.frame(prunedown2)#, pruneup2)
+network2 <- unique(rbind.data.frame(prunedown2, pruneup2))
 
 ## rename nodes
 nodes <- unique(c(network2$child_s, network2$parent_s))
@@ -114,15 +114,20 @@ obs_children <- sapply(1:nrow(obs), function(x) inodes[which(nodes == obs$child_
 obs_toUse <- obs
 obs_toUse$parent_i <- obs_parents
 obs_toUse$child_i <- obs_children
-Network_sz <- network_toUse %>% select(-c("long", "lat"))
 
 
 ##################################
 ## model - encounter observations
 ##################################
-nz_enc_dir <- file.path(nz_dir, "waitaki_encounters_DownstreamOnly")
+nz_enc_dir <- file.path(nz_dir, "waitaki_encounters_DownstreamUpstream100")
 dir.create(nz_enc_dir, showWarnings=FALSE)
 setwd(nz_enc_dir)
+
+saveRDS(obs_toUse, file.path(nz_enc_dir, "observations.rds"))
+saveRDS(network_toUse, file.path(nz_enc_dir, "network.rds"))
+
+Network_sz <- network_toUse %>% select(-c("long", "lat"))
+
 
 AIC_list <- NULL
 
@@ -204,7 +209,7 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz,
                   "CheckForErrors"=FALSE )
 
-plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=TRUE, root=FALSE, savedir=NULL, cex=0.2)
+plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=FALSE, root=FALSE, savedir=nz_enc_dir, cex=0.2)
 
 
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
@@ -515,7 +520,7 @@ Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Up
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 Opt[["SD"]]
-AIC_list$spatiotemporal_spatial_gamma <- as.numeric(Opt$AIC)
+AIC_list$spatiotemporal_spatial_lognormal <- as.numeric(Opt$AIC)
 
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
