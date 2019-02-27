@@ -16,18 +16,18 @@ dir.create(fig_dir, showWarnings=FALSE)
 ## Packages
 #################
 
-devtools::install_github("james-thorson/VAST", ref="development")
-library(VAST)
-# devtools::install_github("merrillrudd/StreamUtils")
-library(StreamUtils)
+# devtools::install_github("james-thorson/VAST", ref="development")
+# library(VAST)
+# # devtools::install_github("merrillrudd/StreamUtils")
+# library(StreamUtils)
 
-library(TMB)
+# library(TMB)
 library(tidyverse)
-library(RColorBrewer)
-library(proj4)
-library(RuddR)
+# library(RColorBrewer)
+# library(proj4)
+# library(RuddR)
 
-################
+# ################
 ## Load data
 ################
 
@@ -38,10 +38,18 @@ network_raw <- REC2.4fromGDB
 # names1 <- colnames(network_raw)
 # write.csv(names1, file.path(data_dir, "Network_REC2.csv"))
 
+covariates <- read.csv(file.path(data_dir, "longfin_covariates_network.csv"), header=TRUE, stringsAsFactors=FALSE)
+covar_toUse <- covariates[which(covariates$toUse==1),"x"]
+
 network <- network_raw %>%
-	select(c('CatName','nzsegment','fnode','tnode','Shape_Leng', 'upcoordX', 'upcoordY', 'downcoordX', 'downcoordY','NextDownID','Headwater','REC2_TerminalSegment','Dist2Coast_FromBottom',"Q50Cumecs","Q5_normCumecs")) %>%
+	select(c('CatName','nzsegment','fnode','tnode','Shape_Leng', 'upcoordX', 'upcoordY', 'downcoordX', 'downcoordY','NextDownID','Headwater','REC2_TerminalSegment', covar_toUse)) %>%
 	rename('parent_s' = tnode, 'child_s' = fnode, 'dist_s'=Shape_Leng, 'northing_child'=upcoordX, 'easting_child'=upcoordY, 'northing_parent'=downcoordX, 'easting_parent'=downcoordY,'NextDownSeg'=NextDownID, 'Headwater'=Headwater) %>%
 	mutate('dist_s' = dist_s / 1000)
+network <- network[-which(is.na(network$child_s)),]
+
+hab <- network %>% 
+		dplyr::select('nzsegment', covar_toUse) %>%
+		tidyr::gather(key = covariate, value = value, covar_toUse[1]:covar_toUse[length(covar_toUse)]) %>%
 
 
 ## all observations
@@ -52,12 +60,6 @@ obs_raw <- NZFFD.REC2.Diad.EF
 cov_list <- read.csv(file.path(data_dir, "longfin_covariates.csv"), stringsAsFactors=FALSE)
 covs <- cov_list[,2]
 
-hab <- obs_raw %>% 
-		dplyr::select('y', 'nzsegment', covs) %>%
-		tidyr::gather(key = covariate, value = value, us_tmin:Contingency) %>%
-		left_join(network, by = 'nzsegment') %>%
-		select('y', 'child_s', 'covariate', 'value') %>%
-		rename('year'=y)
 
 # p <- ggplot(network %>% filter(grepl("Waitaki",CatName))) +
 # 	geom_point(aes(x = northing_child, y = easting_child, color = Dist2Coast_FromBottom)) +
