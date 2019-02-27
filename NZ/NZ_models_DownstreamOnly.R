@@ -43,7 +43,19 @@ Network_sz = network %>% select(-c("long","lat"))
 p1 <- ggplot() +
   geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.2, alpha=0.2) +
   geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
+  xlab("Longitude") + ylab("Latitude") + 
   mytheme()
+# ggsave(file.path(fig_dir, "Waitaki.png"), p1)
+
+p2 <- ggplot() +
+  geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.01, alpha=0.2) +
+  geom_point(data = obs, aes(x = long, y = lat, color = factor(present)), pch=19, cex=1.5,alpha=0.8) +
+  scale_color_brewer(palette = "Set1") +
+  xlab("Longitude") + ylab("Latitude") + 
+  guides(color=guide_legend(title="Encounter")) +
+  facet_wrap(~year) +
+  mytheme()
+# ggsave(file.path(fig_dir, "Waitaki_byYear.png"), p2)
 
 ### prune upstream segments
 ## do not automatically include observed segment and then make sure it still shows up on network when tracing the upstream and downstream segments from the observed segment
@@ -81,12 +93,27 @@ prunedown2 <- unique(prunedown)
 # head_children <- network$child_s[which(network$child_s %in% network$parent_s ==FALSE)]
 # all(head_children %in% pruneup2$child_s)
 # length(which(head_children %in% pruneup2$child_s))/length(head_children)
+down_examples <- lapply(1:3, function(x){
+  sub <- finddown[[x]]
+  out <- sub %>% mutate("Observation" = x)
+  return(out)
+})
+ex <- do.call(rbind, down_examples)
 
-p2 <- ggplot() +
-  geom_point(data = prunedown2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
+p3 <- ggplot() +
+  geom_point(data = ex, aes(x = long, y = lat, color = factor(Observation)), pch=19, cex=2, alpha=0.5)+
+  xlab("Longitude") + ylab("Latitude") +
+  guides(color = guide_legend(title = "Observation #")) +
+  mytheme()
+# ggsave(file.path(fig_dir, "Downstream_examples.png"), p3)
+
+p4 <- ggplot() +
+  geom_point(data = prunedown2, aes(x = long, y = lat), pch=19, cex=1, alpha=0.8) +
   # geom_point(data = pruneup2, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.8) +
   geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
+  xlab("Longitude") + ylab("Latitude") +
   mytheme()
+# ggsave(file.path(fig_dir, "Waitaki_downstreamOnly.png"), p4)
 
 network2 <- rbind.data.frame(prunedown2)#, pruneup2)
 
@@ -120,7 +147,7 @@ obs_toUse$parent_i <- obs_parents
 obs_toUse$child_i <- obs_children
 
 hab_children <- sapply(1:nrow(hab2), function(x) inodes[which(nodes == hab2$child_s[x])])
-hab_all <- hab
+hab_all <- hab2
 hab_all$child_s <- hab_children
 
 ####################################
@@ -146,7 +173,11 @@ panel.cor <- function(x, y, ...){
   txt <- as.character(format(cor(x, y), digits=2))
   text(0.5, 0.5, txt, cex = 6* abs(cor(x, y)))
 }
+png(file.path(fig_dir, "Habitat_pairs.png"), width=15, height=10, units='in', res=200)
 pairs(df, upper.panel=panel.cor)
+dev.off()
+
+
 
 hab_toUse <- hab_all
 
@@ -159,47 +190,26 @@ hab_toUse <- hab_all
 covar_toUse <- colnames(df)
 # hab_toUse <- hab %>% filter(covariate %in% covar_toUse)
 
-n_t <- length(years)
-n_x <- length(nodes)
-n_p <- length(covar_toUse)
-X_xtp <- array(0, dim=c(n_x,n_t,n_p))
+X_xtp <- array(0, dim=c(n_x, n_t, n_p))
 for(p in 1:n_p){
-    psub <- hab_toUse %>% filter(covariate == covar_toUse[p])
-    mat <- matrix(NA, nrow=n_x, ncol=n_t)
-    for(t in 1:n_t){
-      tsub <- psub %>% filter(year==years[t])
-      mat[tsub$child_s,t] <- tsub$value
-    }
-    mat_std <- (mat - mean(mat, na.rm=TRUE))/sd(mat, na.rm=TRUE)
-    for(t in 1:n_t){
-      sub <- mat_std[,t]
-      sub[which(is.na(sub))] <- 0
-      mat_std[,t] <- sub
-    }
-    X_xtp[,,p] <- mat_std
-}
-
-X_xtp_tconstant <- array(0, dim=c(n_x, n_t, n_p))
-hab_oneyear <- hab_toUse %>% group_by(child_s, covariate) %>% summarise('med_value'=median(value))
-for(p in 1:n_p){
-  psub <- hab_oneyear %>% filter(covariate == covar_toUse[p])
+  psub <- hab_toUse %>% filter(covariate == covar_toUse[p])
   mat <- matrix(0, nrow=n_x, ncol = 1)
-  mat[psub$child_s,1] <- psub$med_value
+  mat[psub$child_s,1] <- psub$value
   mat_sd <- (mat - mean(mat, na.rm=TRUE))/sd(mat, na.rm=TRUE)
-  X_xtp_tconstant[,,p] <- mat_sd
+  X_xtp[,,p] <- mat_sd
 }
 
 
-# hab_toPlot <- inner_join(network_toUse, hab_oneyear)
+hab_toPlot <- inner_join(network_toUse, hab_toUse %>% select(-'parent_s'))
 
-# for(i in 1:length(covar_toUse)){
-#   p <- ggplot(hab_toPlot %>% filter(covariate == covar_toUse[i])) +
-#   geom_point(aes(x = long, y = lat, color = med_value)) +
-#   guides(color=guide_legend(title=covar_toUse[i])) +
-#   mytheme()
-#   dev.new()
-#   print(p)
-# }
+for(i in 1:length(covar_toUse)){
+  p <- ggplot(hab_toPlot %>% filter(covariate == covar_toUse[i])) +
+  geom_point(aes(x = long, y = lat, color = value)) +
+  guides(color=guide_legend(title=covar_toUse[i])) +
+  scale_color_viridis_c() +
+  mytheme()
+  ggsave(file.path(fig_dir, paste0("Habitat_covariate_", covar_toUse[i],".png")),p)
+}
 
 ##################################
 ## model - encounter observations
@@ -262,17 +272,17 @@ Data_Geostat = cbind( Data_Geostat, "knot_i"=Spatial_List$knot_i )
 
 
 ########################
-## TEMPORAL GAMMA
+## TEMPORAL GAMMA DELTA LINK
 ########################
-temp_dir <- file.path(nz_enc_dir, "temporal_gamma")
+temp_dir <- file.path(nz_enc_dir, "temporal_gamma_deltalink")
 dir.create(temp_dir, showWarnings=FALSE)
 setwd(temp_dir)
 
 FieldConfig = c("Omega1"=0, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
 RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
-            "Calculate_effective_area"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
 ObsModel = c(2,0)
 
 Data = Data_Fn("Version"=Version,
@@ -294,7 +304,7 @@ Data = Data_Fn("Version"=Version,
                   "Network_sz"=Network_sz,
                   "CheckForErrors"=FALSE )
 
-plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=TRUE, root=FALSE, savedir=nz_enc_dir, cex=0.2)
+plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=TRUE, root=FALSE, savedir=fig_dir, cex=0.2)
 
 
 TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
@@ -313,7 +323,7 @@ saveRDS(Save, file.path(getwd(),"Save.rds"))
 ## convergence
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]
-AIC_list$temporal_gamma <- as.numeric(Opt$AIC)
+AIC_list$temporal_gamma_deltalink <- as.numeric(Opt$AIC)
 
 ## diagnostics for encounter probability component
 Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
@@ -338,19 +348,21 @@ Dens_xt <- plot_maps(plot_set=c(3), TmbData=Data, Report=Report, Spatial_List=Sp
 # ## index of abundance
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
 
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
 ###########################
-### TEMPORAL LOGNORMAL
+### TEMPORAL GAMMA POISSON LINK
 ###########################
-temp_dir <- file.path(nz_enc_dir, "temporal_lognormal")
+temp_dir <- file.path(nz_enc_dir, "temporal_gamma_poisson")
 dir.create(temp_dir, showWarnings=FALSE)
 setwd(temp_dir)
 
 FieldConfig = c("Omega1"=0, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
 RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
-            "Calculate_effective_area"=0)
-ObsModel = c(1,0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(2,1)
 
 Data = Data_Fn("Version"=Version,
                   "FieldConfig"=FieldConfig,
@@ -389,7 +401,7 @@ saveRDS(Save, file.path(getwd(),"Save.rds"))
 ## convergence
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 Opt[["SD"]]
-AIC_list$temporal_lognormal <- as.numeric(Opt$AIC)
+AIC_list$temporal_gamma_poissonlink <- as.numeric(Opt$AIC)
 
 ## diagnostics for encounter probability component
 Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
@@ -414,18 +426,180 @@ Dens_xt <- plot_maps(plot_set=c(3), TmbData=Data, Report=Report, Spatial_List=Sp
 # ## index of abundance
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
 
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+
+
+########################
+## TEMPORAL GAMMA DELTA LINK
+########################
+temp_dir <- file.path(nz_enc_dir, "temporal_lognormal_deltalink")
+dir.create(temp_dir, showWarnings=FALSE)
+setwd(temp_dir)
+
+FieldConfig = c("Omega1"=0, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(1,0)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz,
+                  "CheckForErrors"=FALSE )
+
+plot_network(Spatial_List=Spatial_List, Extrapolation_List=Extrapolation_List, TmbData=Data, Data_Geostat=Data_Geostat, observations=TRUE, arrows=TRUE, root=FALSE, savedir=fig_dir, cex=0.2)
+
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=0, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+## converges without estimating standard error - turn on and estimate
+Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+Report = Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## convergence
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+Opt[["SD"]]
+AIC_list$temporal_lognormal_deltalink <- as.numeric(Opt$AIC)
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- plot_maps(plot_set=c(3), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, cex_network=0.0001)
+# Dens_xt <- StreamUtils::plot_maps(plot_set=c(3), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.00001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year")
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+###########################
+### TEMPORAL LOGNORMAL POISSON LINK
+###########################
+temp_dir <- file.path(nz_enc_dir, "temporal_lognormal_poisson")
+dir.create(temp_dir, showWarnings=FALSE)
+setwd(temp_dir)
+
+FieldConfig = c("Omega1"=0, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(1,1)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  # "X_xtp"=X_xtp_inp,
+                  # "Xconfig_zcp"=Xconfig_zcp,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz,
+                  "CheckForErrors"=FALSE )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=0, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+## converges without estimating standard error - turn on and estimate
+Opt = TMBhelper::Optimize( obj=Obj, startpar=Opt1$par, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+Report = Obj$report()
+Save <- list("TmbList"=TmbList,"Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## convergence
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+Opt[["SD"]]
+AIC_list$temporal_lognormal_poissonlink <- as.numeric(Opt$AIC)
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- plot_maps(plot_set=c(3), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, cex_network=0.0001)
+# Dens_xt <- StreamUtils::plot_maps(plot_set=c(3), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.00001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year")
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+
 ##################
-## SPATIAL GAMMA
+## SPATIAL GAMMA DELTA LINK
 ##################
-space_dir <- file.path(nz_enc_dir, "spatial_temporal_gamma")
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_gamma_deltalink")
 dir.create(space_dir)
 setwd(space_dir)
 
 FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
 RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
-            "Calculate_effective_area"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
 ObsModel = c(2,0)
 
 Data = Data_Fn("Version"=Version,
@@ -459,7 +633,7 @@ Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Up
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 Opt[["SD"]]
-AIC_list$spatial_temporal_gamma <- as.numeric(Opt$AIC)
+AIC_list$spatial_temporal_gamma_deltalink <- as.numeric(Opt$AIC)
 
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
@@ -487,18 +661,95 @@ Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatia
 # ## index of abundance
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
 
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
 ##################
-## SPATIAL LOGNORMAL
+## SPATIAL GAMMA POISSON LINK
 ##################
-space_dir <- file.path(nz_enc_dir, "spatial_temporal_lognormal")
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_gamma_poisson")
 dir.create(space_dir)
 setwd(space_dir)
 
 FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
 RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
 OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
-            "Calculate_effective_area"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(2,1)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatial_temporal_gamma_poissonlink <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+##################
+## SPATIAL LOGNORMAL DELTA LINK
+##################
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_lognormal_deltalink")
+dir.create(space_dir)
+setwd(space_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
 ObsModel = c(1,0)
 
 Data = Data_Fn("Version"=Version,
@@ -532,7 +783,7 @@ Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Up
 Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
 
 Opt[["SD"]]
-AIC_list$spatial_temporal_lognormal <- as.numeric(Opt$AIC)
+AIC_list$spatial_temporal_lognormal_deltalink <- as.numeric(Opt$AIC)
 
 Report <- Obj$report()
 Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
@@ -560,6 +811,405 @@ Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatia
 # ## index of abundance
 Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
 
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+##################
+## SPATIAL LOGNORMAL POISSON LINK
+##################
+space_dir <- file.path(nz_enc_dir, "spatial_temporal_lognormal_poisson")
+dir.create(space_dir)
+setwd(space_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(1,1)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatial_temporal_lognormal_poissonlink <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+#########################
+## SPATIOTEMPORAL GAMMA DELTA LINK
+########################
+st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_gamma_deltalink")
+dir.create(st_dir)
+setwd(st_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(2,0)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = 0.3 #log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatiotemporal_spatial_gamma_deltalink <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+
+
+##########################
+## SPATIOTEMPORAL GAMMA POISSON LINK
+##########################
+st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_gamma_poisson")
+dir.create(st_dir)
+setwd(st_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(2,1)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatiotemporal_spatial_gamma_poissonlink <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+#########################
+## SPATIOTEMPORAL GAMMA DELTA LINK
+########################
+st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_lognormal_deltalink")
+dir.create(st_dir)
+setwd(st_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(1,0)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatiotemporal_spatial_lognormal_deltalink <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+
+
+##########################
+## SPATIOTEMPORAL LOGNORMAL POISSON LINK
+##########################
+st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_lognormal_poisson")
+dir.create(st_dir)
+setwd(st_dir)
+
+FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
+RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(1,1)
+
+Data = Data_Fn("Version"=Version,
+                  "FieldConfig"=FieldConfig,
+                  "OverdispersionConfig"=OverdispersionConfig,
+                  "RhoConfig"=RhoConfig,
+                  "ObsModel"=ObsModel,
+                  "c_iz"=rep(0,nrow(Data_Geostat)),
+                  "b_i"=Data_Geostat[,'Catch_KG'],
+                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
+                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
+                  "s_i"=Data_Geostat[,'knot_i']-1,
+                  "t_iz"=Data_Geostat[,'Year'],
+                  "a_xl"=Spatial_List$a_xl,
+                  "MeshList"=Spatial_List$MeshList,
+                  "GridList"=Spatial_List$GridList,
+                  "Method"=Spatial_List$Method,
+                  "Options"=Options,
+                  "Network_sz"=Network_sz )
+
+TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
+Obj = TmbList[["Obj"]]
+Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
+
+Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+check <- TMBhelper::Check_Identifiable(Obj)
+
+Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
+
+#############
+Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
+
+Opt[["SD"]]
+AIC_list$spatiotemporal_spatial_lognormal_poissonlink <- as.numeric(Opt$AIC)
+
+Report <- Obj$report()
+Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
+saveRDS(Save, file.path(getwd(),"Save.rds"))
+
+## diagnostics for encounter probability component
+Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
+
+## diagnostics for positive catch rate component
+Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
+
+## Plot Pearson residuals
+StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
+
+# ## index of abundance
+# Decide which years to plot                                                   
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+##### Model output
+## density surface for each year
+Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
+# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
+
+# ## index of abundance
+Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
+
+Range <- FishStatsUtils::plot_range_index(Sdreport=Opt$SD, Report=Report, TmbData=Data, Year_Set=Year_Set, PlotDir=paste0(getwd(),"/"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ##################
 ## SPATIAL LOGNORMAL HABITAT
@@ -583,7 +1233,7 @@ for(p in 1:n_p){
   files <- list.files(space_dir)[grep("VAST",list.files(space_dir))]
   ignore <- sapply(1:length(files), function(x) file.copy(from=file.path(space_dir, files[x]), to=new_dir))
 
-  # Xconfig_zcp_inp <- array(0, dim=c(2,1,dim(X_xtp_tconstant)[3]))
+  # Xconfig_zcp_inp <- array(0, dim=c(2,1,dim(X_xtp)[3]))
   # Xconfig_zcp_inp[,,p] <- 1
   Data = Data_Fn("Version"=Version,
                     "FieldConfig"=FieldConfig,
@@ -597,7 +1247,7 @@ for(p in 1:n_p){
                     "s_i"=Data_Geostat[,'knot_i']-1,
                     "t_iz"=Data_Geostat[,'Year'],
                     "a_xl"=Spatial_List$a_xl,
-                    "X_xtp" = array(X_xtp_tconstant[,,p], dim=c(n_x,n_t,1)), 
+                    "X_xtp" = array(X_xtp[,,p], dim=c(n_x,n_t,1)), 
                     # "Xconfig_zcp"=Xconfig_zcp_inp,
                     "MeshList"=Spatial_List$MeshList,
                     "GridList"=Spatial_List$GridList,
@@ -657,155 +1307,6 @@ for(p in 1:n_p){
 
 }
 
-#########################
-## spatiotemporal gamma
-########################
-st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_gamma")
-dir.create(st_dir)
-setwd(st_dir)
-
-FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
-RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
-OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
-            "Calculate_effective_area"=0)
-ObsModel = c(2,0)
-
-Data = Data_Fn("Version"=Version,
-                  "FieldConfig"=FieldConfig,
-                  "OverdispersionConfig"=OverdispersionConfig,
-                  "RhoConfig"=RhoConfig,
-                  "ObsModel"=ObsModel,
-                  "c_iz"=rep(0,nrow(Data_Geostat)),
-                  "b_i"=Data_Geostat[,'Catch_KG'],
-                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
-                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
-                  "s_i"=Data_Geostat[,'knot_i']-1,
-                  "t_iz"=Data_Geostat[,'Year'],
-                  "a_xl"=Spatial_List$a_xl,
-                  "MeshList"=Spatial_List$MeshList,
-                  "GridList"=Spatial_List$GridList,
-                  "Method"=Spatial_List$Method,
-                  "Options"=Options,
-                  "Network_sz"=Network_sz )
-
-TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
-Obj = TmbList[["Obj"]]
-Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
-
-Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
-check <- TMBhelper::Check_Identifiable(Obj)
-
-Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
-
-#############
-Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
-
-Opt[["SD"]]
-AIC_list$spatiotemporal_spatial_gamma <- as.numeric(Opt$AIC)
-
-Report <- Obj$report()
-Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
-saveRDS(Save, file.path(getwd(),"Save.rds"))
-
-## diagnostics for encounter probability component
-Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
-
-## diagnostics for positive catch rate component
-Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
-
-## Plot Pearson residuals
-StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
-
-# ## index of abundance
-# Decide which years to plot                                                   
-Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
-Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
-
-##### Model output
-## density surface for each year
-Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
-# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
-
-# ## index of abundance
-Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
-
-
-
-
-##########################
-## spatiotemporal lognormal
-##########################
-st_dir <- file.path(nz_enc_dir, "spatiotemporal_spatial_lognormal")
-dir.create(st_dir)
-setwd(st_dir)
-
-FieldConfig = c("Omega1"=1, "Epsilon1"=1, "Omega2"=0, "Epsilon2"=0)
-RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
-OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
-Options =  c("Calculate_Range"=0, 
-            "Calculate_effective_area"=0)
-ObsModel = c(1,0)
-
-Data = Data_Fn("Version"=Version,
-                  "FieldConfig"=FieldConfig,
-                  "OverdispersionConfig"=OverdispersionConfig,
-                  "RhoConfig"=RhoConfig,
-                  "ObsModel"=ObsModel,
-                  "c_iz"=rep(0,nrow(Data_Geostat)),
-                  "b_i"=Data_Geostat[,'Catch_KG'],
-                  "a_i"=Data_Geostat[,'AreaSwept_km2'],
-                  "v_i"=as.numeric(Data_Geostat[,'Vessel'])-1,
-                  "s_i"=Data_Geostat[,'knot_i']-1,
-                  "t_iz"=Data_Geostat[,'Year'],
-                  "a_xl"=Spatial_List$a_xl,
-                  "MeshList"=Spatial_List$MeshList,
-                  "GridList"=Spatial_List$GridList,
-                  "Method"=Spatial_List$Method,
-                  "Options"=Options,
-                  "Network_sz"=Network_sz )
-
-TmbList = Build_TMB_Fn("TmbData"=Data, "Version"=Version, "RhoConfig"=RhoConfig, "loc_x"=Spatial_List$loc_x, "Method"=Method)
-Obj = TmbList[["Obj"]]
-Obj$par[grep("logkappa",names(Obj$par))] = log(1/median(Network_sz[,'dist_s']))
-
-Opt1 = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=FALSE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
-check <- TMBhelper::Check_Identifiable(Obj)
-
-Opt = TMBhelper::Optimize( obj=Obj, lower=TmbList[["Lower"]], upper=TmbList[["Upper"]], getsd=TRUE, bias.correct=TRUE, newtonsteps=3, bias.correct.control=list(sd=TRUE, split=NULL, nsplit=1, vars_to_correct="Index_cyl") )
-
-#############
-Opt$diagnostics[,c('Param','Lower','MLE','Upper','final_gradient')]
-
-Opt[["SD"]]
-AIC_list$spatiotemporal_spatial_lognormal <- as.numeric(Opt$AIC)
-
-Report <- Obj$report()
-Save <- list("TmbList"=TmbList, "Data"=Data, "Obj"=Obj, "Opt"=Opt, "Report"=Report)
-saveRDS(Save, file.path(getwd(),"Save.rds"))
-
-## diagnostics for encounter probability component
-Enc_prob = StreamUtils::plot_encounter_diagnostic( Report=Report, Data=Data)
-
-## diagnostics for positive catch rate component
-Q = StreamUtils::plot_quantile_diagnostic( TmbData=Data, Report=Report, FileName_QQ="Q-Q_plot", plot=2) #StreamUtils::
-
-## Plot Pearson residuals
-StreamUtils::plot_residuals(Extrapolation_List=Extrapolation_List, Spatial_List=Spatial_List, TmbData=Data, Data_Geostat=Data_Geostat, Report=Report, Q=Q, plot_type=1 )
-
-# ## index of abundance
-# Decide which years to plot                                                   
-Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
-Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
-
-##### Model output
-## density surface for each year
-Dens_xt <- StreamUtils::plot_maps(plot_set=3, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.000001)
-# Cov_xt <- StreamUtils::plot_maps(plot_set=c(11), TmbData=Data, Report=Report, Spatial_List=Spatial_List, Data_Geostat=Data_Geostat, Panel="year", cex=0.0001)
-
-# ## index of abundance
-Index = StreamUtils::plot_biomass_index( TmbData=Data, Sdreport=Opt$SD, Year_Set=Year_Set, Years2Include=Years2Include, use_biascorr=FALSE, strata_names = "Longfin eels" )
-
 
 
 
@@ -830,7 +1331,7 @@ for(p in 1:n_p){
   files <- list.files(st_dir)[grep("VAST",list.files(st_dir))]
   ignore <- sapply(1:length(files), function(x) file.copy(from=file.path(st_dir, files[x]), to=new_dir))
 
-  # Xconfig_zcp_inp <- array(0, dim=c(2,1,dim(X_xtp_tconstant)[3]))
+  # Xconfig_zcp_inp <- array(0, dim=c(2,1,dim(X_xtp)[3]))
   # Xconfig_zcp_inp[,,p] <- 1
   Data = Data_Fn("Version"=Version,
                     "FieldConfig"=FieldConfig,
@@ -844,7 +1345,7 @@ for(p in 1:n_p){
                     "s_i"=Data_Geostat[,'knot_i']-1,
                     "t_iz"=Data_Geostat[,'Year'],
                     "a_xl"=Spatial_List$a_xl,
-                    "X_xtp" = array(X_xtp_tconstant[,,p], dim=c(n_x,n_t,1)), 
+                    "X_xtp" = array(X_xtp[,,p], dim=c(n_x,n_t,1)), 
                     # "Xconfig_zcp"=Xconfig_zcp_inp,
                     "MeshList"=Spatial_List$MeshList,
                     "GridList"=Spatial_List$GridList,

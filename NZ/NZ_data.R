@@ -24,8 +24,8 @@ dir.create(fig_dir, showWarnings=FALSE)
 # library(TMB)
 library(tidyverse)
 # library(RColorBrewer)
-# library(proj4)
-# library(RuddR)
+library(proj4)
+library(RuddR)
 
 # ################
 ## Load data
@@ -48,17 +48,13 @@ network <- network_raw %>%
 network <- network[-which(is.na(network$child_s)),]
 
 hab <- network %>% 
-		dplyr::select('nzsegment', covar_toUse) %>%
-		tidyr::gather(key = covariate, value = value, covar_toUse[1]:covar_toUse[length(covar_toUse)]) %>%
+		dplyr::select('parent_s','child_s', covar_toUse) %>%
+		tidyr::gather(key = covariate, value = value, covar_toUse[1]:covar_toUse[length(covar_toUse)])
 
 
 ## all observations
 load(file.path(data_dir, "Diadromous fish dataset.Rdata"))
 obs_raw <- NZFFD.REC2.Diad.EF
-
-## covariates for longfins
-cov_list <- read.csv(file.path(data_dir, "longfin_covariates.csv"), stringsAsFactors=FALSE)
-covs <- cov_list[,2]
 
 
 # p <- ggplot(network %>% filter(grepl("Waitaki",CatName))) +
@@ -169,7 +165,7 @@ nzmap <- ggplot(network) +
 		geom_point(aes(x = long_child, y = lat_child)) +
 		xlab("Longitude") + ylab("Latitude") +
 		mytheme()
-ggsave(file.path(fig_dir, "NZmap.png"), nzmap)
+# ggsave(file.path(fig_dir, "NZmap.png"), nzmap)
 
 ## observations
 obs_ll_parent <- lapply(1:nrow(obs_all), function(x){
@@ -309,7 +305,9 @@ obs_toUse <- obs_reformat %>% select(-c('lat_parent', 'long_parent', 'NextDownSe
 			rename('parent_i' = parent_s, 'child_i' = child_s, 'dist_i' = dist_s)
 
 hab_children <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_sub$child_s[x])])
+hab_parents <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_sub$parent_s[x])])
 hab_sub$child_s <- hab_children
+hab_sub$parent_s <- hab_parents
 
 obs_list <- NULL
 obs_list$observations <- obs_toUse
