@@ -203,6 +203,9 @@ Options =  c("Calculate_Range"=1,
             "Calculate_effective_area"=1)
 ObsModel = c(1,0)
 
+### outputs data input for VAST
+## and prints structure for each model parameter
+## information on model parameters found at ?VAST::Param
 Data = make_data("Version"=Version,
                   "FieldConfig"=FieldConfig,
                   "OverdispersionConfig"=OverdispersionConfig,
