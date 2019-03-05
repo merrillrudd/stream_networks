@@ -32,11 +32,17 @@ library(RuddR)
 data <- data("nz_waitaki_longfin_eel_downstream", package="StreamUtils")
 
 network <- nz_waitaki_longfin_eel_downstream[["network"]]
+
+network$lat[which(network$parent_s == 0)] <- network$lat[which(network$parent_s == 0)] + 0.00001
+network$long[which(network$parent_s == 0)] <- network$long[which(network$parent_s == 0)] + 0.00001
+
+
 obs <- nz_waitaki_longfin_eel_downstream[["observations"]] %>%
     dplyr::filter(data_type=="encounter") %>%
     select(-data_type) %>%
     rename('present' = data_value)
 # hab <- nz_waitaki_longfin_eel_downstream[["habitat"]]
+
 
 Network_sz = network %>% select(c('parent_s','child_s','dist_s'))
 
@@ -128,13 +134,6 @@ nz_enc_dir <- file.path(nz_dir, "waitaki_encounters_DownstreamOnly")
 dir.create(nz_enc_dir, showWarnings=FALSE)
 setwd(nz_enc_dir)
 
-## single vessel 
-vname_i <- unique(obs$fishmethod)
-v_i <- sapply(1:nrow(obs), function(x) which(vname_i == obs$fishmethod[x]))
-
-network$lat[which(network$parent_s == 0)] <- network$lat[which(network$parent_s == 0)] + 0.00001
-network$long[which(network$parent_s == 0)] <- network$long[which(network$parent_s == 0)] + 0.00001
-
 
 saveRDS(obs, file.path(nz_enc_dir, "observations.rds"))
 saveRDS(network, file.path(nz_enc_dir, "network.rds"))
@@ -156,11 +155,11 @@ present_new <- sapply(1:length(present), function(x) ifelse(present[x]==1, prese
 obs$present <- present_new
 
 ##### setup data frame
-vname_i <- unique(obs$fishmethod)
-v_i <- sapply(1:nrow(obs), function(x) which(vname_i == obs$fishmethod[x]))
+# vname_i <- unique(obs$fishmethod)
+# v_i <- sapply(1:nrow(obs), function(x) which(vname_i == obs$fishmethod[x]))
 Data_Geostat <- data.frame( "Catch_KG" = present_new, 
               "Year" = obs$year,
-               "Vessel" = v_i, 
+               "Vessel" = obs$fishmethod, 
                "AreaSwept_km2" = obs$dist_i, 
                "Lat" = obs$lat, 
                "Lon" = obs$long, 
@@ -198,7 +197,7 @@ setwd(temp_dir)
 
 FieldConfig = c("Omega1"=0, "Epsilon1"=0, "Omega2"=0, "Epsilon2"=0)
 RhoConfig = c("Beta1"=2, "Beta2"=3, "Epsilon1"=0, "Epsilon2"=0)
-OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+OverdispersionConfig = c("Eta1"=1, "Eta2"=0)
 Options =  c("Calculate_Range"=1, 
             "Calculate_effective_area"=1)
 ObsModel = c(1,0)
