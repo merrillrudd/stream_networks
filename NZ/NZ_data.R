@@ -35,6 +35,13 @@ library(RuddR)
 load(file.path(data_dir, "REC2.4fromGDB.Rdata"))
 network_raw <- REC2.4fromGDB
 
+load(file.path(data_dir, "FINAL_REC2_FOR_PREDICTIONS.Rdata"))
+network_old <- REC2
+
+choose <- network_old %>% select("nzsegment", "FWENZ_DSDamAffected", "REC1_WidthHUC.MALF_cumecs") %>%
+	rename('DamAffected'=FWENZ_DSDamAffected, "width"=REC1_WidthHUC.MALF_cumecs) %>%
+	mutate('width' = width / 1000)
+
 ## list of covariates to consider initially at least
 covariates <- read.csv(file.path(data_dir, "longfin_covariates_network.csv"), header=TRUE, stringsAsFactors=FALSE)
 covar_toUse <- covariates[which(covariates$toUse==1),"x"]
@@ -42,17 +49,26 @@ covar_toUse <- covariates[which(covariates$toUse==1),"x"]
 ## filter important things from network and adjust distance to km
 network <- network_raw %>%
 	select(c('CatName','nzsegment','fnode','tnode','Shape_Leng', 'upcoordX', 'upcoordY', 'downcoordX', 'downcoordY','NextDownID','Headwater','REC2_TerminalSegment', covar_toUse)) %>%
-	rename('parent_s' = tnode, 'child_s' = fnode, 'dist_s'=Shape_Leng, 'northing_child'=upcoordY, 'easting_child'=upcoordX, 'northing_parent'=downcoordY, 'easting_parent'=downcoordX,'NextDownSeg'=NextDownID, 'Headwater'=Headwater) %>%
-	mutate('dist_s' = dist_s / 1000)
+	rename('parent_s' = tnode, 'child_s' = fnode, 'length'=Shape_Leng, 'northing_child'=upcoordY, 'easting_child'=upcoordX, 'northing_parent'=downcoordY, 'easting_parent'=downcoordX,'NextDownSeg'=NextDownID, 'Headwater'=Headwater) %>%
+	mutate('length' = length / 1000)
 
 ## remove NAs from network
 network <- network[-which(is.na(network$child_s)),]
 
+network_combine <- left_join(network, choose)
+sapply(1:ncol(network_combine), function(x) length(which(is.na(network_combine[,x])))/nrow(network_combine))
+
+
+# sub <- network_combine %>% filter(grepl('aitaki',CatName))
+
+covar_toUse <- c(covar_toUse, "DamAffected")
+
 ## network
-network_reformat <- network %>% 
-	select('CatName', 'nzsegment','parent_s', 'child_s', 'dist_s', 'easting_child','northing_child', "NextDownSeg", covar_toUse)  %>%
+network_reformat <- network_combine %>% 
+	select('CatName', 'nzsegment','parent_s', 'child_s', 'length', 'width','easting_child','northing_child', "NextDownSeg", covar_toUse)  %>%
 	rename('easting'=easting_child, 'northing'=northing_child) %>%
-	filter(easting != 0)
+	filter(easting != 0) %>%
+	mutate('dist_s' = length * width)
 
 root_nodes <- which(network_reformat$parent_s %in% network_reformat$child_s == FALSE)
 true_root_node <- which(network_reformat$NextDownSeg==-1)
@@ -165,6 +181,61 @@ length(unique(network_adj3$child_s))
 nrow(unique(network_adj3 %>% select(easting,northing)))
 
 
+# dam_gaps <- network_adj3 %>% filter(is.na(DamAffected))
+# dam_gap_child <- unique(dam_gaps$child_s)
+
+# dam_gap_down <- network_adj3 %>% filter(child_s %in% dam_gaps$parent_s) %>% filter(is.na(DamAffected)==FALSE)
+# dam_gap_up <- network_adj3 %>% filter(parent_s %in% dam_gaps$child_s) %>% filter(is.na(DamAffected)==FALSE)
+
+# dam_new <- lapply(1:nrow(dam_gaps), function(x){
+# 	sub <- dam_gaps[x,]
+# 	nextdown <- dam_gap_down
+
+
+
+
+# 	up_info <- dam_gap_up %>% filter(parent_s == sub$child_s[x])
+# 	down_info <- dam_gap_down %>% filter(child_s == sub$parent_s[x])
+# 	if(nrow(up_info)==0 & nrow(down_info)==0) return(data.frame("child_s"=dam_gap_child[x], "DamAffected"=NA))
+# 	if(nrow(up_info)!=0) return(data.frame('child_s'=dam_gap_child[x], 'DamAffected'=up_info$DamAffected))
+# 	if(nrow(down_info)!=0) return(data.frame('child_s'=dam_gap_child[x], "DamAffected"=down_info$DamAffected))
+# })
+# dam_check <- do.call(rbind, dam_new)
+
+
+# save <- rbind.data.frame(net_obs,nextdown)
+# for(i in 1:100){
+#   nextdown <- network_sub %>% filter(child_s %in% nextdown$parent_s)
+#   save <- unique(rbind.data.frame(save, nextdown))
+#   print(nrow(save))
+# }
+# network_sub2 <- save
+
+
+
+# lapply(1:length(dam_gap_child), function(x){
+# 	sub <- dam_gaps %>% filter(child_s == dam_gap_child[x])
+# 	dam_up <- network_adj3 %>% filter(parent_s == sub$child_s)
+# 	dam_down <- network_adj3 %>% filter(child_s == sub$parent_s)
+# 	up_info <- ifelse(nrow(dam_up)==0, NA, dam_up$DamAffected)
+# 	down_info <- ifelse(nrow(dam_down)==0, NA, dam_down$DamAffected)
+# 	if(is.na(up_info) & is.na(down_info)){
+# 		if(nrow(dam_down)>0){
+# 			dam_down <- network_adj3 %>% filter(child_s == dam_down$parent_s)
+# 			down_info <- ifelse(nrow(dam_down)==0, NA, dam_down$DamAffected)
+# 		}
+# 		if(nrow(dam_up)>0){
+
+# 		}
+# 	}
+# })
+
+# dam_next <- network_adj3 %>% filter(nzsegment %in% dam_gaps$NextDownSeg)
+# dam_up <- network_adj3 %>% filter(NextDownSeg %in% dam_gaps$nzsegment)
+
+
+
+
 # network_adj4 <- rbind.data.frame(network_adj3 %>% filter(child_s != names(child_multi)), find[1,])
 
 # nrow(network_adj4)
@@ -219,10 +290,12 @@ dens_raw <- read.csv(file.path(data_dir, "longfin_density_data.csv"))
 length_raw <- read.csv(file.path(data_dir, "longfin_length_data.csv"))
 age_raw <- read.csv(file.path(data_dir, "Waitaki_aging_data_DONOTPUBLISH.csv"))
 
+waikato_dens_raw <- read.csv(file.path(data_dir, "Waikato Abundance.REC.csv"), stringsAsFactors=FALSE)
+
 ## filter information we need from observations, do some renaming, and label encounter data
-obs <- obs_raw %>% 
-	select(c('catchname', 'catch','nzsegment', 'fishmeth','angdie', 'upcoordX','downcoordX','upcoordY','downcoordY','y')) %>%
-	rename('catchment'=catchname, 'catch_number'=catch, 'fishmethod'=fishmeth, 'present'=angdie, 'northing_child'=upcoordY, 'easting_child'=upcoordX, 'northing_parent'=downcoordY, 'easting_parent'=downcoordX, 'year'=y) %>%
+obs_enc <- obs_raw %>% 
+	select(c('catchname','nzsegment', 'fishmeth','angdie', 'upcoordX','downcoordX','upcoordY','downcoordY','y', 'org.groups')) %>%
+	rename('catchment'=catchname,'fishmethod'=fishmeth, 'present'=angdie, 'northing_child'=upcoordY, 'easting_child'=upcoordX, 'northing_parent'=downcoordY, 'easting_parent'=downcoordX, 'year'=y, 'agency'=org.groups) %>%
 	mutate('year' = as.numeric(as.character(year))) %>%
 	na.omit() %>%
 	# mutate('fishmethod' = 'ef') %>%
@@ -233,32 +306,71 @@ obs <- obs_raw %>%
 	select(-c(easting_parent, northing_parent)) %>%
 	rename('easting'=easting_child, 'northing'=northing_child)
 
-obs_ll_child <- lapply(1:nrow(obs), function(x){
-	p <- calc_NZ_latlon(northing = obs$northing[x], easting = obs$easting[x])
+obs_ll_child <- lapply(1:nrow(obs_enc), function(x){
+	p <- calc_NZ_latlon(northing = obs_enc$northing[x], easting = obs_enc$easting[x])
 	return(p)
 })
 obs_ll_child <- do.call(rbind, obs_ll_child)
 # obs_ll_child <- data.frame(obs_ll_child) #%>% dplyr::rename('long_child'=long, 'lat_child'=lat)
 
-obs <- cbind.data.frame(obs, obs_ll_child)
-all(obs$nzsegment %in% network_full$nzsegment)
+obs_enc <- cbind.data.frame(obs_enc, obs_ll_child)
+all(obs_enc$nzsegment %in% network_full$nzsegment)
 # obs <- obs %>% filter(nzsegment %in% network_full$nzsegment == TRUE)
 
 ## observations
-network_sz <- network_full %>% select('nzsegment','parent_s','child_s','dist_s')
-obs_reformat <- inner_join(network_sz, obs, by='nzsegment') %>% filter(parent_s !=0) # %>% select(-c('catchment','northing', 'easting'))
+network_sz <- network_full %>% select('CatName','nzsegment','parent_s','child_s','width')
+obs_reformat <- inner_join(network_sz, obs_enc, by='nzsegment') %>% filter(parent_s !=0) # %>% select(-c('catchment','northing', 'easting'))
 obs_reformat$data_value <- sapply(1:nrow(obs_reformat), function(x){
 	if(obs_reformat$data_type[x]!="encounter") out <- obs_reformat$data_value[x]
 	if(obs_reformat$data_type[x]=="encounter") out <- ifelse(obs_reformat$data_value[x]==FALSE, 0, 1)
 	return(out)
 })
+obs_reformat <- obs_reformat %>%
+	mutate('length' = 125 / 1000) %>%
+	mutate('dist_i' = length * width) %>%
+	select(-catchment)
 
-obs_full <- obs_reformat %>% 
-			rename('parent_i' = parent_s, 'child_i' = child_s, 'dist_i' = dist_s)
+## waikato densities 
+waikato_dens <- waikato_dens_raw %>%
+	select("Sample.Date_fish",'nzsegment', "E.NZTM", "N.NZTM", "average_measured_stream_channel_width_m", "Angdie.ALL") 
+waikato_dens$Sample.Date_fish <- as.character(waikato_dens$Sample.Date_fish)
+waikato_dens$year <- sapply(1:nrow(waikato_dens), function(x) strsplit(waikato_dens$Sample.Date_fish[x], "/")[[1]][3])
+waikato_dens <- waikato_dens %>%
+	select(-Sample.Date_fish) %>%
+	rename('easting'=E.NZTM, "northing"=N.NZTM, 'width' = average_measured_stream_channel_width_m, 'count'=Angdie.ALL) %>%
+	mutate(width = width / 1000) %>%
+	mutate(length = 150 / 1000) %>%
+	mutate(dist_i = width * length) %>%
+	mutate('data_type' = "count") %>%
+	rename('data_value' = count)
+
+obs_ll_child <- lapply(1:nrow(waikato_dens), function(x){
+	p <- calc_NZ_latlon(northing = waikato_dens$northing[x], easting = waikato_dens$easting[x])
+	return(p)
+})
+obs_ll_child <- do.call(rbind, obs_ll_child)
+# obs_ll_child <- data.frame(obs_ll_child) #%>% dplyr::rename('long_child'=long, 'lat_child'=lat)
+
+waikato_dens_ll <- cbind.data.frame(waikato_dens, obs_ll_child)
+all(waikato_dens_ll$nzsegment %in% network_full$nzsegment)
+
+waikato_reformat <- inner_join(network_sz, waikato_dens_ll, by="nzsegment") %>% filter(parent_s != 0)
+waikato_reformat <- waikato_reformat %>% 
+	select(-width.x) %>%
+	rename('width' = width.y) %>%
+	mutate('fishmethod'=unique(obs_reformat$fishmethod)[grepl("Electric",unique(obs_reformat$fishmethod))]) %>%
+	mutate('agency'=unique(obs_reformat$agency)[grepl('council',unique(obs_reformat$agency))]) %>%
+	mutate(pass = 0) %>%
+	mutate(source = "Waikato_region")
+
+obs_all <- rbind.data.frame(obs_reformat, waikato_reformat)
+
+obs_full <- obs_all %>% 
+			rename('parent_i' = parent_s, 'child_i' = child_s)
 
 obsmap <- ggplot() +
 		geom_point(data=network_full, aes(x = easting, y = northing), col = "black", cex=0.2) +
-		geom_point(data=obs %>% filter(data_type=="encounter"), aes(x = easting, y = northing), col = "red") +
+		geom_point(data=obs_full, aes(x = easting, y = northing, color = data_type)) +
 		xlab("Easting") + ylab("Northing") +
 		mytheme()
 ggsave(file.path(fig_dir, "NZmap_obs.png"), obsmap)
@@ -351,17 +463,22 @@ hab_full <- readRDS(file.path(data_dir, "NZ_habitat.rds"))
 ## subset Waitaki catchment
 #############################
 
-network_sub <- network_all %>% filter(grepl("aitaki", CatName))
-obs_sub <- obs_all %>% filter(grepl("711",catch_number))
-obs_sub <- obs_sub %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
-hab_sub <- hab %>% filter(child_s %in% network_sub$child_s == TRUE)
+network_sub <- network_full %>% filter(grepl("aitaki", CatName))
+
+# net_sub2 <- network_full %>% filter(grepl("hitney", CatName))
+# obs_sub <- obs_full %>% filter(grepl("711",catch_number))
+obs_sub <- obs_full %>% filter(grepl("aitaki", CatName))
+
+all(obs_sub$nzsegment %in% network_sub$nzsegment)
+# obs_sub <- obs_sub %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
+hab_sub <- hab_full %>% filter(child_s %in% network_sub$child_s == TRUE)
 
 catchmap <- ggplot() +
-		geom_point(data=network_sub, aes(x = long, y = lat), col="black") +
-		geom_point(data=obs_sub, aes(x = long, y = lat), col = "red") +
-		xlab("Longitude") + ylab("Latitude") +
+		geom_point(data=network_sub, aes(x = easting, y = northing), col="black") +
+		geom_point(data=obs_sub, aes(x = easting, y = northing, color = data_type)) +
+		xlab("Easting") + ylab("Northing") +
 		mytheme()
-# ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
+ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
 
 #############################
 ## format
@@ -391,11 +508,24 @@ obs_children <- sapply(1:nrow(obs_sub), function(x) inodes[which(nodes == obs_su
 obs_sub$parent_i <- obs_parents
 obs_sub$child_i <- obs_children
 
+hab_parents <- sapply(1:nrow(hab_sub), function(x){
+  if(hab_sub$parent_s[x] != 0) new_node <- inodes[which(nodes == hab_sub$parent_s[x])]
+  if(hab_sub$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+hab_children <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_sub$child_s[x])])
+
+hab_sub$parent_s <- hab_parents
+hab_sub$child_s <- hab_children
+
+
 saveRDS(obs_sub, file.path(data_dir, "Waitaki_observations.rds"))
 saveRDS(network_sub, file.path(data_dir, "Waitaki_network.rds"))
+saveRDS(hab_sub, file.path(data_dir, "Waitaki_habitat.rds"))
 
 obs_sub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 network_sub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
+hab_sub <- readRDS(file.path(data_dir, "Waitaki_habitat.rds"))
 
 #########################################
 ## Waitaki catchment downstream segments
@@ -440,18 +570,193 @@ obs_sub2 <- obs_sub
 obs_sub2$parent_i <- obs_parents
 obs_sub2$child_i <- obs_children
 
+hab_parents <- sapply(1:nrow(hab_sub2), function(x){
+  if(hab_sub2$parent_s[x] != 0) new_node <- inodes[which(nodes == hab_sub2$parent_s[x])]
+  if(hab_sub2$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+hab_children <- sapply(1:nrow(hab_sub2), function(x) inodes[which(nodes == hab_sub2$child_s[x])])
+
+hab_sub2$parent_s <- hab_parents
+hab_sub2$child_s <- hab_children
+
+catchmap <- ggplot() +
+		geom_point(data=network_sub2, aes(x = easting, y = northing), col="black") +
+		geom_point(data=obs_sub2, aes(x = easting, y = northing, color = data_type)) +
+		xlab("Easting") + ylab("Northing") +
+		mytheme()
+ggsave(file.path(fig_dir, "Waitaki_map_downstream.png"), catchmap)
+
+
 saveRDS(obs_sub2, file.path(data_dir, "Waitaki_observations_downstreamOnly.rds"))
 saveRDS(network_sub2, file.path(data_dir, "Waitaki_network_downstreamOnly.rds"))
+saveRDS(hab_sub2, file.path(data_dir, "Waitaki_habitat_downstreamOnly.rds"))
+
+
+#############################
+## subset Waikato catchment
+#############################
+
+network_sub_wk <- network_full %>% filter(grepl("aikato", CatName))
+
+# net_sub2 <- network_full %>% filter(grepl("hitney", CatName))
+# obs_sub <- obs_full %>% filter(grepl("711",catch_number))
+obs_sub_wk <- obs_full %>% filter(grepl("aikato", CatName))
+
+all(obs_sub_wk$nzsegment %in% network_sub_wk$nzsegment)
+hab_sub_wk <- hab_full %>% filter(child_s %in% network_sub_wk$child_s == TRUE)
+
+catchmap2 <- ggplot() +
+		geom_point(data=network_sub_wk, aes(x = easting, y = northing), col="black") +
+		geom_point(data=obs_sub_wk, aes(x = easting, y = northing, color = data_type)) +
+		xlab("Easting") + ylab("Northing") +
+		mytheme()
+ggsave(file.path(fig_dir, "Waikato_map.png"), catchmap)
+
+#############################
+## format
+#############################
+
+## rename nodes
+nodes <- unique(c(network_sub_wk$child_s, network_sub_wk$parent_s))
+inodes <- seq_along(nodes)
+
+net_parents <- sapply(1:nrow(network_sub_wk), function(x){
+  if(network_sub_wk$parent_s[x] != 0) new_node <- inodes[which(nodes == network_sub_wk$parent_s[x])]
+  if(network_sub_wk$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+net_children <- sapply(1:nrow(network_sub_wk), function(x) inodes[which(nodes == network_sub_wk$child_s[x])])
+
+network_sub_wk$parent_s <- net_parents
+network_sub_wk$child_s <- net_children
+
+obs_parents <- sapply(1:nrow(obs_sub_wk), function(x){
+  if(obs_sub_wk$parent_i[x] != 0) new_node <- inodes[which(nodes == obs_sub_wk$parent_i[x])]
+  if(obs_sub_wk$parent_i[x] == 0) new_node <- 0
+  return(new_node)  
+})
+obs_children <- sapply(1:nrow(obs_sub_wk), function(x) inodes[which(nodes == obs_sub_wk$child_i[x])])
+
+obs_sub_wk$parent_i <- obs_parents
+obs_sub_wk$child_i <- obs_children
+
+hab_parents <- sapply(1:nrow(hab_sub_wk), function(x){
+  if(hab_sub_wk$parent_s[x] != 0) new_node <- inodes[which(nodes == hab_sub_wk$parent_s[x])]
+  if(hab_sub_wk$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+hab_children <- sapply(1:nrow(hab_sub_wk), function(x) inodes[which(nodes == hab_sub_wk$child_s[x])])
+
+hab_sub_wk$parent_s <- hab_parents
+hab_sub_wk$child_s <- hab_children
+
+
+saveRDS(obs_sub_wk, file.path(data_dir, "Waikato_observations.rds"))
+saveRDS(network_sub_wk, file.path(data_dir, "Waikato_network.rds"))
+saveRDS(hab_sub_wk, file.path(data_dir, "Waikato_habitat.rds"))
+
+obs_sub_wk <- readRDS(file.path(data_dir, "Waikato_observations.rds"))
+network_sub_wk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
+hab_sub_wk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
+
+#########################################
+## Waitaki catchment downstream segments
+#########################################
+
+obs_sub_wk2 <- obs_sub_wk %>% filter(is.na(dist_i)==FALSE)
+obs_child <- unique(obs_sub_wk2$child_i)
+
+net_obs <- network_sub_wk %>% filter(child_s %in% obs_child)
+nextdown <- network_sub_wk %>% filter(child_s %in% net_obs$parent_s)
+save <- rbind.data.frame(net_obs,nextdown)
+for(i in 1:100){
+  nextdown <- network_sub_wk %>% filter(child_s %in% nextdown$parent_s)
+  save <- unique(rbind.data.frame(save, nextdown))
+  print(nrow(save))
+}
+network_sub_wk2 <- save
+
+network_sub_wk2 <- network_sub_wk2 %>% filter(is.na(dist_s) == FALSE)
+
+hab_sub_wk2 <- hab_sub_wk %>% filter(child_s %in% network_sub_wk2$child_s)
+
+## rename nodes
+nodes <- unique(c(network_sub_wk2$child_s, network_sub_wk2$parent_s))
+inodes <- seq_along(nodes)
+
+net_parents <- sapply(1:nrow(network_sub_wk2), function(x){
+  if(network_sub_wk2$parent_s[x] != 0) new_node <- inodes[which(nodes == network_sub_wk2$parent_s[x])]
+  if(network_sub_wk2$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+net_children <- sapply(1:nrow(network_sub_wk2), function(x) inodes[which(nodes == network_sub_wk2$child_s[x])])
+
+network_sub_wk2$parent_s <- net_parents
+network_sub_wk2$child_s <- net_children
+
+obs_parents <- sapply(1:nrow(obs_sub_wk), function(x){
+  if(obs_sub_wk$parent_i[x] != 0) new_node <- inodes[which(nodes == obs_sub_wk$parent_i[x])]
+  if(obs_sub_wk$parent_i[x] == 0) new_node <- 0
+  return(new_node)  
+})
+obs_children <- sapply(1:nrow(obs_sub_wk), function(x) inodes[which(nodes == obs_sub_wk$child_i[x])])
+
+# obs_sub_wk2 <- obs_sub_wk
+obs_sub_wk2$parent_i <- obs_parents
+obs_sub_wk2$child_i <- obs_children
+
+all(obs_sub_wk2$child_i %in% network_sub_wk2$child_s)
+
+hab_parents <- sapply(1:nrow(hab_sub_wk2), function(x){
+  if(hab_sub_wk2$parent_s[x] != 0) new_node <- inodes[which(nodes == hab_sub_wk2$parent_s[x])]
+  if(hab_sub_wk2$parent_s[x] == 0) new_node <- 0
+  return(new_node)
+})
+hab_children <- sapply(1:nrow(hab_sub_wk2), function(x) inodes[which(nodes == hab_sub_wk2$child_s[x])])
+
+hab_sub_wk2$parent_s <- hab_parents
+hab_sub_wk2$child_s <- hab_children
+
+
+
+catchmap <- ggplot() +
+		geom_point(data=network_sub_wk2, aes(x = easting, y = northing), col="black") +
+		geom_point(data=obs_sub_wk2, aes(x = easting, y = northing, color = data_type)) +
+		geom_point(data=network_sub_wk2 %>% filter(parent_s == 0), aes(x = easting, y = northing), fill = "goldenrod", pch=21, cex=3) +
+		xlab("Easting") + ylab("Northing") +
+		mytheme()
+ggsave(file.path(fig_dir, "Waikato_map_downstream.png"), catchmap)
+
+
+saveRDS(obs_sub_wk2, file.path(data_dir, "Waikato_observations_downstreamOnly.rds"))
+saveRDS(network_sub_wk2, file.path(data_dir, "Waikato_network_downstreamOnly.rds"))
+saveRDS(hab_sub_wk2, file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
+
+
+
+
+
 
 
 obsfull <- readRDS(file.path(data_dir, "NZ_observations.rds"))
 obssub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 obssub2 <- readRDS(file.path(data_dir, "Waitaki_observations_downstreamOnly.rds"))
+obssubwk <- readRDS(file.path(data_dir, "Waikato_observations.rds"))
+obssubwk2 <- readRDS(file.path(data_dir, "Waikato_observations_downstreamOnly.rds"))
 
 netfull <- readRDS(file.path(data_dir, "NZ_network.rds"))
 netsub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
 netsub2 <- readRDS(file.path(data_dir, "Waitaki_network_downstreamOnly.rds"))
+netsubwk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
+netsubwk2 <- readRDS(file.path(data_dir, "Waikato_network_downstreamOnly.rds"))
 
+
+habfull <- readRDS(file.path(data_dir, "NZ_habitat.rds"))
+habsub <- readRDS(file.path(data_dir, "Waitaki_habitat.rds"))
+habsub2 <- readRDS(file.path(data_dir, "Waitaki_habitat_downstreamOnly.rds"))
+habsubwk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
+habsubwk2 <- readRDS(file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
 
 
 ## save rda
@@ -460,12 +765,29 @@ nz_longfin_eel$observations <- obsfull
 nz_longfin_eel$network <- netfull
 save(nz_longfin_eel, file=file.path(data_dir2, "nz_longfin_eel.rda"))
 
+nz_longfin_eel_habitat <- habfull
+save(nz_longfin_eel_habitat, file=file.path(data_dir2, 'nz_longfin_eel_habitat.rda'))
+
 nz_waitaki_longfin_eel <- list()
 nz_waitaki_longfin_eel$observations <- obssub
 nz_waitaki_longfin_eel$network <- netsub
+nz_waitaki_longfin_eel$habitat <- habsub
 save(nz_waitaki_longfin_eel, file=file.path(data_dir2, "nz_waitaki_longfin_eel.rda"))
 
 nz_waitaki_longfin_eel_downstream <- list()
 nz_waitaki_longfin_eel_downstream$observations <- obssub2
 nz_waitaki_longfin_eel_downstream$network <- netsub2
+nz_waitaki_longfin_eel_downstream$habitat <- habsub2
 save(nz_waitaki_longfin_eel_downstream, file=file.path(data_dir2, "nz_waitaki_longfin_eel_downstream.rda"))
+
+nz_waikato_longfin_eel <- list()
+nz_waikato_longfin_eel$observations <- obssubwk
+nz_waikato_longfin_eel$network <- netsubwk
+nz_waikato_longfin_eel$habitat <- habsubwk
+save(nz_waikato_longfin_eel, file=file.path(data_dir2, "nz_waikato_longfin_eel.rda"))
+
+nz_waikato_longfin_eel_downstream <- list()
+nz_waikato_longfin_eel_downstream$observations <- obssubwk2
+nz_waikato_longfin_eel_downstream$network <- netsubwk2
+nz_waikato_longfin_eel_downstream$habitat <- habsubwk2
+save(nz_waikato_longfin_eel_downstream, file=file.path(data_dir2, "nz_waikato_longfin_eel_downstream.rda"))
