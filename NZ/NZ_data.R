@@ -540,8 +540,14 @@ hab_children <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_su
 hab_sub$parent_s <- hab_parents
 hab_sub$child_s <- hab_children
 
+# sapply(1:length(covar_toUse), function(x){
+# 	sub <- hab_sub %>% filter(covariate == covar_toUse[x])
+# 	any(is.na(sub$value))
+# })
+
 hab_sub2 <- lapply(1:length(covar_toUse), function(x){
 	sub <- hab_sub %>% filter(covariate == covar_toUse[x])
+	any(is.na(sub$value))
 	if(any(is.na(sub$value))){
 
 		interp_east <- sub$easting[which(is.na(sub$value)==FALSE)]
@@ -576,9 +582,11 @@ hab_sub2 <- lapply(1:length(covar_toUse), function(x){
 check <- sapply(1:length(hab_sub2), function(x) any(is.na(hab_sub2[[x]]$value)))
 all(check == FALSE)
 
+hab_sub2 <- do.call(rbind, hab_sub2)
+
 saveRDS(obs_sub, file.path(data_dir, "Waitaki_observations.rds"))
 saveRDS(network_sub, file.path(data_dir, "Waitaki_network.rds"))
-saveRDS(hab_sub, file.path(data_dir, "Waitaki_habitat.rds"))
+saveRDS(hab_sub2, file.path(data_dir, "Waitaki_habitat.rds"))
 
 obs_sub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 network_sub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
