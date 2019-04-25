@@ -289,7 +289,7 @@ network_full <- cbind.data.frame(network_all3, network_ll_child)
 nrow(network_full)
 nrow(unique(network_full))
 nrow(network_full %>% select('lat','long'))
-nrow(network_full %>% select('easting','northing')
+nrow(network_full %>% select('easting','northing'))
 
 ## map of full NZ network
 nzmap <- ggplot(network_full) +
@@ -540,41 +540,56 @@ hab_children <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_su
 hab_sub$parent_s <- hab_parents
 hab_sub$child_s <- hab_children
 
-# sapply(1:length(covar_toUse), function(x){
-# 	sub <- hab_sub %>% filter(covariate == covar_toUse[x])
-# 	any(is.na(sub$value))
-# })
+sapply(1:length(covar_toUse), function(x){
+	sub <- hab_sub %>% filter(covariate == covar_toUse[x])
+	any(is.na(sub$value))
+})
 
 hab_sub2 <- lapply(1:length(covar_toUse), function(x){
 	sub <- hab_sub %>% filter(covariate == covar_toUse[x])
-	any(is.na(sub$value))
+	# any(is.na(sub$value))
 	if(any(is.na(sub$value))){
 
-		interp_east <- sub$easting[which(is.na(sub$value)==FALSE)]
-		interp_north <- sub$northing[which(is.na(sub$value)==FALSE)]
-		interp_z <- sub$value[which(is.na(sub$value)==FALSE)]
+		if(covar_toUse[x]!="DamAffected"){
+			interp_east <- sub$easting[which(is.na(sub$value)==FALSE)]
+			interp_north <- sub$northing[which(is.na(sub$value)==FALSE)]
+			interp_z <- sub$value[which(is.na(sub$value)==FALSE)]	
 
-		find_df <- data.frame('east' = sub$easting[which(is.na(sub$value))], 'north' = sub$northing[which(is.na(sub$value))])
+			find_df <- data.frame('east' = sub$easting[which(is.na(sub$value))], 'north' = sub$northing[which(is.na(sub$value))])	
 
-		east <- sub$easting[order(sub$easting)]
-		north <- sub$northing[order(sub$northing)]
-		# mat2 <- zoo::na.approx(object = mat)
-		compute <- akima::interp(x = interp_east, y = interp_north, z = interp_z, xo=east, yo=north, extrap=TRUE)
-		mat2 <- compute$z
+			east <- sub$easting[order(sub$easting)]
+			north <- sub$northing[order(sub$northing)]
+			# mat2 <- zoo::na.approx(object = mat)
+			compute <- akima::interp(x = interp_east, y = interp_north, z = interp_z, xo=east, yo=north, extrap=TRUE)
+			mat2 <- compute$z	
 
-		vals <- sapply(1:nrow(find_df), function(y){
-			mat2[which(compute$x == find_df$east[y]), which(compute$y == find_df$north[y])]
-		})
+			vals <- sapply(1:nrow(find_df), function(y){
+				mat2[which(compute$x == find_df$east[y]), which(compute$y == find_df$north[y])]
+			})	
 
-		inp_vals <- sub$value
-		inp_vals[which(is.na(inp_vals))] <- vals
+			inp_vals <- sub$value
+			inp_vals[which(is.na(inp_vals))] <- vals	
 
-		sub$value <- inp_vals
+			sub$value <- inp_vals	
 
-		if(length(which(is.na(sub$value)))==1){
-			xx <- sub[(which(is.na(sub$value))-5):(which(is.na(sub$value))+5),]
-			val_inp <- median(xx$value, na.rm=TRUE)
-			sub$value[which(is.na(sub$value))] <- val_inp
+			if(length(which(is.na(sub$value)))==1){
+				xx <- sub[(which(is.na(sub$value))-5):(which(is.na(sub$value))+5),]
+				val_inp <- median(xx$value, na.rm=TRUE)
+				sub$value[which(is.na(sub$value))] <- val_inp
+			}
+		}
+		if(covar_toUse[x]=="DamAffected"){
+
+
+			inp <- sub$value
+			inp[which(is.na(inp))] <- 2
+			ggplot(sub) + geom_point(aes(x = easting, y = northing, color = factor(inp)))
+
+			input_val <- sub$value
+			input_val[which(is.na(input_val) & sub$northing > 5025000)] <- 1
+			input_val[which(is.na(input_val) & sub$northing < 5025000)] <- 0
+
+			sub$value <- input_val
 		}
 	}
 	return(sub)
