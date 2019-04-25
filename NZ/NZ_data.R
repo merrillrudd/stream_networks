@@ -7,7 +7,6 @@ rm(list=ls())
 nz_dir <- "C:\\merrill\\stream_networks\\NZ"
 
 data_dir <- file.path(nz_dir, "data")
-data_dir2 <- file.path("C:\\merrill\\StreamUtils\\data")
 
 fig_dir <- file.path(nz_dir, "figures")
 dir.create(fig_dir, showWarnings=FALSE)
@@ -109,83 +108,98 @@ nrow(network_all)
 length(unique(network_all$child_s))
 nrow(unique(network_all %>% select(easting,northing)))
 
+e_mult <- names(table(network_all$easting))[which(table(network_all$easting)>1)]
+e_uni <- network_all %>% filter(easting %in% e_mult == FALSE)
+set.seed(123)
+e_rep <- network_all %>% filter(easting %in% e_mult) %>% mutate(easting = easting + runif(length(easting),-1,1)) 
 
-easting_unique <- unique(network_all$easting)
-xx <- table(network_all$easting)
-easting_single <- names(xx)[which(xx == 1)]
-easting_2 <- names(xx)[which(xx == 2)]
-easting_more <- names(xx)[which(xx > 2)] 
-net_byEastSingle <- network_all %>% filter(easting %in% easting_single)
+network_all2 <- rbind.data.frame(e_uni, e_rep)
+max(table(network_all2$easting))
 
-net_byEast2 <- network_all %>% filter(easting %in% easting_2) %>%
-				mutate(easting_new = ifelse(parent_s == 0, easting + 1, easting)) %>%
-				# mutate(northing_new = ifelse(parent_s == 0, northing + 1, northing)) %>%
-				select(-c(easting)) %>%
-				rename('easting'=easting_new)
+n_mult <- names(table(network_all2$northing))[which(table(network_all2$northing)>1)]
+n_uni <- network_all2 %>% filter(northing %in% n_mult == FALSE)
+set.seed(456)
+n_rep <- network_all2 %>% filter(northing %in% n_mult) %>% mutate(northing = northing + runif(length(northing),-1,1))
 
-network_adj <- rbind.data.frame(net_byEastSingle, net_byEast2)
-nrow(network_adj)
-length(unique(network_adj$child_s))
-nrow(unique(network_adj %>% select(easting,northing)))
+network_all3 <- rbind.data.frame(n_uni, n_rep)
+max(table(network_all3$northing))
 
-xx2 <- table(network_adj$easting)
-yy2 <- table(network_adj$northing)
-easting_22 <- names(xx2)[which(xx2 > 1)]
-northing_22 <- names(yy2)[which(yy2 > 1)]
+# easting_unique <- unique(network_all$easting)
+# xx <- table(network_all$easting)
+# easting_single <- names(xx)[which(xx == 1)]
+# easting_2 <- names(xx)[which(xx == 2)]
+# easting_more <- names(xx)[which(xx > 2)] 
+# net_byEastSingle <- network_all %>% filter(easting %in% easting_single)
 
-net2 <- network_adj %>% filter(easting %in% easting_22) %>% filter(northing %in% northing_22)
-net3 <- network_adj %>% filter(easting != unique(net2$easting)) %>% filter(northing != unique(net2$northing))
-net2$easting <- c(net2$easting[1], net2$easting[2]+1)
-net2$northing <- c(net2$northing[1], net2$northing[2]+1)
+# net_byEast2 <- network_all %>% filter(easting %in% easting_2) %>%
+# 				mutate(easting_new = ifelse(parent_s == 0, easting + 1, easting)) %>%
+# 				# mutate(northing_new = ifelse(parent_s == 0, northing + 1, northing)) %>%
+# 				select(-c(easting)) %>%
+# 				rename('easting'=easting_new)
 
-network_adj2 <- rbind.data.frame(net3, net2)
+# network_adj <- rbind.data.frame(net_byEastSingle, net_byEast2)
+# nrow(network_adj)
+# length(unique(network_adj$child_s))
+# nrow(unique(network_adj %>% select(easting,northing)))
 
-nrow(network_adj2)
-length(unique(network_adj2$child_s))
-nrow(unique(network_adj2 %>% select(easting,northing)))
+# xx2 <- table(network_adj$easting)
+# yy2 <- table(network_adj$northing)
+# easting_22 <- names(xx2)[which(xx2 > 1)]
+# northing_22 <- names(yy2)[which(yy2 > 1)]
 
-# child_count <- table(network_adj2$child_s)
-# child_multi <- child_count[which(child_count > 1)]
-# find <- network_adj2 %>% filter(child_s == names(child_multi))
-# network_adj3 <- rbind.data.frame(network_adj2 %>% filter(child_s != names(child_multi)), find[1,])
+# net2 <- network_adj %>% filter(easting %in% easting_22) %>% filter(northing %in% northing_22)
+# net3 <- network_adj %>% filter(easting != unique(net2$easting)) %>% filter(northing != unique(net2$northing))
+# net2$easting <- c(net2$easting[1], net2$easting[2]+1)
+# net2$northing <- c(net2$northing[1], net2$northing[2]+1)
 
-# nrow(network_adj3)
-# length(unique(network_adj3$child_s))
-# nrow(unique(network_adj3 %>% select(easting,northing)))
+# network_adj2 <- rbind.data.frame(net3, net2)
 
+# nrow(network_adj2)
+# length(unique(network_adj2$child_s))
+# nrow(unique(network_adj2 %>% select(easting,northing)))
 
-sub1 <- network_all %>% filter(easting == easting_more[1])
-net4 <- sub1 %>% 
-	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1, easting[4])) %>%
-	mutate(northing = c(northing[1:3],northing[4]+1))
+# # child_count <- table(network_adj2$child_s)
+# # child_multi <- child_count[which(child_count > 1)]
+# # find <- network_adj2 %>% filter(child_s == names(child_multi))
+# # network_all3 <- rbind.data.frame(network_adj2 %>% filter(child_s != names(child_multi)), find[1,])
 
-sub2 <- network_all %>% filter(easting == easting_more[2])
-net5 <- sub2 %>% 
-	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1)) %>%
-	mutate(northing = c(northing[1], northing[2]-1, northing[3]+1))
-
-sub3 <- network_all %>% filter(easting == easting_more[3])
-net6 <- sub3 %>% 
-	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1, easting[4])) %>%
-	mutate(northing = c(northing[1:3], northing[4]-1))
-
-sub4 <- network_all %>% filter(easting == easting_more[4])
-net7 <- sub4 %>% 
-	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1)) %>%
-	mutate(northing = c(northing[1], northing[2]-1, northing[3]+1))
-
-network_adj3 <- rbind.data.frame(network_adj2, net4, net5, net6, net7)
-
-nrow(network_adj3)
-length(unique(network_adj3$child_s))
-nrow(unique(network_adj3 %>% select(easting,northing)))
+# # nrow(network_all3)
+# # length(unique(network_all3$child_s))
+# # nrow(unique(network_all3 %>% select(easting,northing)))
 
 
-# dam_gaps <- network_adj3 %>% filter(is.na(DamAffected))
+# sub1 <- network_all %>% filter(easting == easting_more[1])
+# net4 <- sub1 %>% 
+# 	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1, easting[4]-1)) %>%
+# 	mutate(northing = c(northing[1], northing[2]-1, northing[3]+1, northing[4]+1))
+
+# sub2 <- network_all %>% filter(easting == easting_more[2])
+# net5 <- sub2 %>% 
+# 	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1)) %>%
+# 	mutate(northing = c(northing[1], northing[2]-1, northing[3]+1))
+
+# sub3 <- network_all %>% filter(easting == easting_more[3])
+# net6 <- sub3 %>% 
+# 	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1, easting[4]+1)) %>%
+# 	mutate(northing = c(northing[1], northing[2]-1, northing[3]+1, northing[4]-1))
+
+# sub4 <- network_all %>% filter(easting == easting_more[4])
+# net7 <- sub4 %>% 
+# 	mutate(easting = c(easting[1], easting[2]-1, easting[3]+1)) %>%
+# 	mutate(northing = c(northing[1], northing[2]-1, northing[3]+1))
+
+# network_all3 <- rbind.data.frame(network_adj2, net4, net5, net6, net7)
+
+# nrow(network_all3)
+# length(unique(network_all3$child_s))
+# nrow(unique(network_all3 %>% select(easting,northing)))
+
+
+# dam_gaps <- network_all3 %>% filter(is.na(DamAffected))
 # dam_gap_child <- unique(dam_gaps$child_s)
 
-# dam_gap_down <- network_adj3 %>% filter(child_s %in% dam_gaps$parent_s) %>% filter(is.na(DamAffected)==FALSE)
-# dam_gap_up <- network_adj3 %>% filter(parent_s %in% dam_gaps$child_s) %>% filter(is.na(DamAffected)==FALSE)
+# dam_gap_down <- network_all3 %>% filter(child_s %in% dam_gaps$parent_s) %>% filter(is.na(DamAffected)==FALSE)
+# dam_gap_up <- network_all3 %>% filter(parent_s %in% dam_gaps$child_s) %>% filter(is.na(DamAffected)==FALSE)
 
 # dam_new <- lapply(1:nrow(dam_gaps), function(x){
 # 	sub <- dam_gaps[x,]
@@ -215,13 +229,13 @@ nrow(unique(network_adj3 %>% select(easting,northing)))
 
 # lapply(1:length(dam_gap_child), function(x){
 # 	sub <- dam_gaps %>% filter(child_s == dam_gap_child[x])
-# 	dam_up <- network_adj3 %>% filter(parent_s == sub$child_s)
-# 	dam_down <- network_adj3 %>% filter(child_s == sub$parent_s)
+# 	dam_up <- network_all3 %>% filter(parent_s == sub$child_s)
+# 	dam_down <- network_all3 %>% filter(child_s == sub$parent_s)
 # 	up_info <- ifelse(nrow(dam_up)==0, NA, dam_up$DamAffected)
 # 	down_info <- ifelse(nrow(dam_down)==0, NA, dam_down$DamAffected)
 # 	if(is.na(up_info) & is.na(down_info)){
 # 		if(nrow(dam_down)>0){
-# 			dam_down <- network_adj3 %>% filter(child_s == dam_down$parent_s)
+# 			dam_down <- network_all3 %>% filter(child_s == dam_down$parent_s)
 # 			down_info <- ifelse(nrow(dam_down)==0, NA, dam_down$DamAffected)
 # 		}
 # 		if(nrow(dam_up)>0){
@@ -230,13 +244,13 @@ nrow(unique(network_adj3 %>% select(easting,northing)))
 # 	}
 # })
 
-# dam_next <- network_adj3 %>% filter(nzsegment %in% dam_gaps$NextDownSeg)
-# dam_up <- network_adj3 %>% filter(NextDownSeg %in% dam_gaps$nzsegment)
+# dam_next <- network_all3 %>% filter(nzsegment %in% dam_gaps$NextDownSeg)
+# dam_up <- network_all3 %>% filter(NextDownSeg %in% dam_gaps$nzsegment)
 
 
 
 
-# network_adj4 <- rbind.data.frame(network_adj3 %>% filter(child_s != names(child_multi)), find[1,])
+# network_adj4 <- rbind.data.frame(network_all3 %>% filter(child_s != names(child_multi)), find[1,])
 
 # nrow(network_adj4)
 # length(unique(network_adj4$child_s))
@@ -255,23 +269,27 @@ calc_NZ_latlon <- function(northing, easting){
 }
 
 ## latitude and longitude for parent nodes in network
-# network_ll_parent <- lapply(1:nrow(network_adj3), function(x){
-# 	p <- calc_NZ_latlon(northing = network_adj3$northing_parent[x], easting = network_adj3$easting_parent[x])
+# network_ll_parent <- lapply(1:nrow(network_all3), function(x){
+# 	p <- calc_NZ_latlon(northing = network_all3$northing_parent[x], easting = network_all3$easting_parent[x])
 # 	return(p)
 # })
 # network_ll_parent <- do.call(rbind, network_ll_parent)
 # network_ll_parent <- data.frame(network_ll_parent) %>% dplyr::rename('long_parent'=long, 'lat_parent'=lat)
 
 ## latitude and longitude for child nodes in network
-network_ll_child <- lapply(1:nrow(network_adj3), function(x){
-	p <- calc_NZ_latlon(northing = network_adj3$northing[x], easting = network_adj3$easting[x])
+network_ll_child <- lapply(1:nrow(network_all3), function(x){
+	p <- calc_NZ_latlon(northing = network_all3$northing[x], easting = network_all3$easting[x])
 	return(p)
 })
 network_ll_child <- do.call(rbind, network_ll_child)
 # network_ll_child <- data.frame(network_ll_child) #%>% dplyr::rename('long_child'=long, 'lat_child'=lat)
 
 ## attach latitude and longtiude to network
-network_full <- cbind.data.frame(network_adj3, network_ll_child)
+network_full <- cbind.data.frame(network_all3, network_ll_child)
+nrow(network_full)
+nrow(unique(network_full))
+nrow(network_full %>% select('lat','long'))
+nrow(network_full %>% select('easting','northing')
 
 ## map of full NZ network
 nzmap <- ggplot(network_full) +
@@ -377,7 +395,7 @@ ggsave(file.path(fig_dir, "NZmap_obs.png"), obsmap)
 
 ## select habitat data from network separately
 hab_full <- network_full %>% 
-		dplyr::select('nzsegment', 'parent_s','child_s', covar_toUse) %>%
+		dplyr::select('nzsegment', 'parent_s','child_s', covar_toUse, easting, northing) %>%
 		tidyr::gather(key = covariate, value = value, covar_toUse[1]:covar_toUse[length(covar_toUse)])
 
 
@@ -480,6 +498,10 @@ catchmap <- ggplot() +
 		mytheme()
 ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
 
+catchmap2 <- nzmap + 
+	geom_point(data = network_sub, aes(x = easting, y = northing), col = "gray")
+ggsave(file.path(fig_dir, "Waitaki_on_NZ.png"), catchmap2)
+
 #############################
 ## format
 #############################
@@ -518,6 +540,41 @@ hab_children <- sapply(1:nrow(hab_sub), function(x) inodes[which(nodes == hab_su
 hab_sub$parent_s <- hab_parents
 hab_sub$child_s <- hab_children
 
+hab_sub2 <- lapply(1:length(covar_toUse), function(x){
+	sub <- hab_sub %>% filter(covariate == covar_toUse[x])
+	if(any(is.na(sub$value))){
+
+		interp_east <- sub$easting[which(is.na(sub$value)==FALSE)]
+		interp_north <- sub$northing[which(is.na(sub$value)==FALSE)]
+		interp_z <- sub$value[which(is.na(sub$value)==FALSE)]
+
+		find_df <- data.frame('east' = sub$easting[which(is.na(sub$value))], 'north' = sub$northing[which(is.na(sub$value))])
+
+		east <- sub$easting[order(sub$easting)]
+		north <- sub$northing[order(sub$northing)]
+		# mat2 <- zoo::na.approx(object = mat)
+		compute <- akima::interp(x = interp_east, y = interp_north, z = interp_z, xo=east, yo=north, extrap=TRUE)
+		mat2 <- compute$z
+
+		vals <- sapply(1:nrow(find_df), function(y){
+			mat2[which(compute$x == find_df$east[y]), which(compute$y == find_df$north[y])]
+		})
+
+		inp_vals <- sub$value
+		inp_vals[which(is.na(inp_vals))] <- vals
+
+		sub$value <- inp_vals
+
+		if(length(which(is.na(sub$value)))==1){
+			xx <- sub[(which(is.na(sub$value))-5):(which(is.na(sub$value))+5),]
+			val_inp <- median(xx$value, na.rm=TRUE)
+			sub$value[which(is.na(sub$value))] <- val_inp
+		}
+	}
+	return(sub)
+})
+check <- sapply(1:length(hab_sub2), function(x) any(is.na(hab_sub2[[x]]$value)))
+all(check == FALSE)
 
 saveRDS(obs_sub, file.path(data_dir, "Waitaki_observations.rds"))
 saveRDS(network_sub, file.path(data_dir, "Waitaki_network.rds"))
