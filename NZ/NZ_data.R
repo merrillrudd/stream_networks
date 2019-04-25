@@ -25,6 +25,7 @@ library(tidyverse)
 # library(RColorBrewer)
 library(proj4)
 library(RuddR)
+# library(sf)
 
 # ################
 ## Load data
@@ -58,7 +59,11 @@ network_combine <- left_join(network, choose)
 sapply(1:ncol(network_combine), function(x) length(which(is.na(network_combine[,x])))/nrow(network_combine))
 
 
-# sub <- network_combine %>% filter(grepl('aitaki',CatName))
+## wait to adjust widths for smaller areas
+# ## order by northing
+# width <- akima::interp(x = network_combine$easting_child[-which(is.na(network_combine$width))], y = network_combine$northing_child[-which(is.na(network_combine$width))], z = network_combine$width[-which(is.na(network_combine$width))], xo = network_combine$easting_child[which(is.na(network_combine$width))], yo = network_combine$northing_child[which(is.na(network_combine$width))], duplicate = "median")
+
+# # sub <- network_combine %>% filter(grepl('aitaki',CatName))
 
 covar_toUse <- c(covar_toUse, "DamAffected")
 
@@ -483,6 +488,10 @@ hab_full <- readRDS(file.path(data_dir, "NZ_habitat.rds"))
 
 network_sub <- network_full %>% filter(grepl("aitaki", CatName))
 
+width_new <- network_sub$width
+width_new[which(is.na(network_sub$width))] <- median(network_sub$width, na.rm=TRUE)
+network_sub$width <- width_new
+
 # net_sub2 <- network_full %>% filter(grepl("hitney", CatName))
 # obs_sub <- obs_full %>% filter(grepl("711",catch_number))
 obs_sub <- obs_full %>% filter(grepl("aitaki", CatName))
@@ -574,6 +583,7 @@ hab_sub2 <- lapply(1:length(covar_toUse), function(x){
 
 			if(length(which(is.na(sub$value)))==1){
 				xx <- sub[(which(is.na(sub$value))-5):(which(is.na(sub$value))+5),]
+				xx2 <- xx[order(xx$easting),]
 				val_inp <- median(xx$value, na.rm=TRUE)
 				sub$value[which(is.na(sub$value))] <- val_inp
 			}
@@ -610,6 +620,11 @@ hab_sub <- readRDS(file.path(data_dir, "Waitaki_habitat.rds"))
 #########################################
 ## Waitaki catchment downstream segments
 #########################################
+
+# loc_df <- hab_sub %>% select('easting', 'northing')
+# loc_mat <- as.matrix(loc_df)
+# loc <- st_linestring(loc_mat)
+# loc_simp <- st_simplify(loc, dTolerance = 5)
 
 obs_child <- unique(obs_sub$child_i)
 
@@ -741,7 +756,7 @@ network_sub_wk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
 hab_sub_wk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
 
 #########################################
-## Waitaki catchment downstream segments
+## Waikato catchment downstream segments
 #########################################
 
 obs_sub_wk2 <- obs_sub_wk %>% filter(is.na(dist_i)==FALSE)
@@ -822,21 +837,21 @@ saveRDS(hab_sub_wk2, file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
 obsfull <- readRDS(file.path(data_dir, "NZ_observations.rds"))
 obssub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 obssub2 <- readRDS(file.path(data_dir, "Waitaki_observations_downstreamOnly.rds"))
-obssubwk <- readRDS(file.path(data_dir, "Waikato_observations.rds"))
-obssubwk2 <- readRDS(file.path(data_dir, "Waikato_observations_downstreamOnly.rds"))
+# obssubwk <- readRDS(file.path(data_dir, "Waikato_observations.rds"))
+# obssubwk2 <- readRDS(file.path(data_dir, "Waikato_observations_downstreamOnly.rds"))
 
 netfull <- readRDS(file.path(data_dir, "NZ_network.rds"))
 netsub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
 netsub2 <- readRDS(file.path(data_dir, "Waitaki_network_downstreamOnly.rds"))
-netsubwk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
-netsubwk2 <- readRDS(file.path(data_dir, "Waikato_network_downstreamOnly.rds"))
+# netsubwk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
+# netsubwk2 <- readRDS(file.path(data_dir, "Waikato_network_downstreamOnly.rds"))
 
 
 habfull <- readRDS(file.path(data_dir, "NZ_habitat.rds"))
 habsub <- readRDS(file.path(data_dir, "Waitaki_habitat.rds"))
 habsub2 <- readRDS(file.path(data_dir, "Waitaki_habitat_downstreamOnly.rds"))
-habsubwk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
-habsubwk2 <- readRDS(file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
+# habsubwk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
+# habsubwk2 <- readRDS(file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
 
 
 ## save rda
