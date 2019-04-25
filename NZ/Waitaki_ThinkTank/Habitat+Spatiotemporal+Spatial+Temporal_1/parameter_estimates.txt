@@ -1,0 +1,75 @@
+$par
+         L1_z    L_omega1_z  L_epsilon1_z     L_beta1_z     logkappa1 
+ 1.704004e+00 -1.721817e-13  3.493416e-01  3.364552e-01 -1.164367e+00 
+ Beta_mean1_c      beta2_ft     logSigmaM 
+-2.667451e+00  1.006819e+01  6.380722e-01 
+
+$objective
+[1] 509.9479
+attr(,"logarithm")
+[1] TRUE
+
+$iterations
+[1] 23
+
+$evaluations
+function gradient 
+      29       23 
+
+$time_for_MLE
+Time difference of 5.338189 mins
+
+$max_gradient
+[1] 2.973887e-07
+
+$Convergence_check
+[1] "There is no evidence that the model is not converged"
+
+$number_of_coefficients
+ Total  Fixed Random 
+203292      8 203284 
+
+$AIC
+[1] 1035.896
+attr(,"logarithm")
+[1] TRUE
+
+$diagnostics
+                    Param starting_value Lower           MLE Upper
+L1_z                 L1_z      0.7094065  -Inf  1.704004e+00   Inf
+L_omega1_z     L_omega1_z      1.0000000  -Inf -1.721817e-13   Inf
+L_epsilon1_z L_epsilon1_z      1.0000000  -Inf  3.493416e-01   Inf
+L_beta1_z       L_beta1_z      1.0000000  -Inf  3.364552e-01   Inf
+logkappa1       logkappa1     -0.1053605  -Inf -1.164367e+00   Inf
+Beta_mean1_c Beta_mean1_c      0.0000000  -Inf -2.667451e+00   Inf
+beta2_ft         beta2_ft      9.7145632  -Inf  1.006819e+01   Inf
+logSigmaM       logSigmaM      1.6094379  -Inf  6.380722e-01    10
+             final_gradient
+L1_z          -3.846843e-10
+L_omega1_z    -2.311047e-13
+L_epsilon1_z   2.973887e-07
+L_beta1_z     -1.466002e-07
+logkappa1      1.230772e-07
+Beta_mean1_c   3.206758e-09
+beta2_ft      -1.252817e-14
+logSigmaM      5.002671e-14
+
+$SD
+sdreport(.) result
+                  Estimate Std. Error
+L1_z          1.704004e+00 0.93798114
+L_omega1_z   -1.721817e-13 0.86315552
+L_epsilon1_z  3.493416e-01 0.09592227
+L_beta1_z     3.364552e-01 0.14166629
+logkappa1    -1.164367e+00 0.66652577
+Beta_mean1_c -2.667451e+00 1.65320864
+beta2_ft      1.006819e+01 0.32792972
+logSigmaM     6.380722e-01 0.07332353
+Maximum gradient component: 2.973887e-07 
+
+$time_for_sdreport
+Time difference of 23.12676 mins
+
+$time_for_run
+Time difference of 28.57456 mins
+

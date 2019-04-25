@@ -1,0 +1,66 @@
+$par
+         L1_z    L_omega1_z  L_epsilon1_z     L_beta1_z     logkappa1  Beta_mean1_c 
+ 1.704004e+00  1.729378e-12  3.493416e-01  3.364552e-01 -1.164367e+00 -2.667451e+00 
+     beta2_ft     logSigmaM 
+ 1.006708e+01  6.372257e-01 
+
+$objective
+[1] 510.048
+attr(,"logarithm")
+[1] TRUE
+
+$iterations
+[1] 24
+
+$evaluations
+function gradient 
+      32       24 
+
+$time_for_MLE
+Time difference of 4.544806 mins
+
+$max_gradient
+[1] 1.711611e-07
+
+$Convergence_check
+[1] "There is no evidence that the model is not converged"
+
+$number_of_coefficients
+ Total  Fixed Random 
+203292      8 203284 
+
+$AIC
+[1] 1036.096
+attr(,"logarithm")
+[1] TRUE
+
+$diagnostics
+                    Param starting_value Lower           MLE Upper final_gradient
+L1_z                 L1_z      1.6384450  -Inf  1.704004e+00   Inf   1.071086e-09
+L_omega1_z     L_omega1_z      1.0000000  -Inf  1.729378e-12   Inf   2.321196e-12
+L_epsilon1_z L_epsilon1_z      1.0000000  -Inf  3.493416e-01   Inf  -5.932972e-08
+L_beta1_z       L_beta1_z      1.0000000  -Inf  3.364552e-01   Inf   2.109800e-08
+logkappa1       logkappa1     -0.1053605  -Inf -1.164367e+00   Inf   1.711611e-07
+Beta_mean1_c Beta_mean1_c      0.0000000  -Inf -2.667451e+00   Inf  -2.923883e-12
+beta2_ft         beta2_ft      9.7135352  -Inf  1.006708e+01   Inf  -3.303260e-14
+logSigmaM       logSigmaM      1.6094379  -Inf  6.372257e-01    10   1.163522e-13
+
+$SD
+sdreport(.) result
+                  Estimate Std. Error
+L1_z          1.704004e+00 0.93798113
+L_omega1_z    1.729378e-12 0.86315552
+L_epsilon1_z  3.493416e-01 0.09592254
+L_beta1_z     3.364552e-01 0.14166632
+logkappa1    -1.164367e+00 0.66652858
+Beta_mean1_c -2.667451e+00 1.65320933
+beta2_ft      1.006708e+01 0.32747432
+logSigmaM     6.372257e-01 0.07332353
+Maximum gradient component: 1.711611e-07 
+
+$time_for_sdreport
+Time difference of 17.52294 mins
+
+$time_for_run
+Time difference of 22.14793 mins
+
