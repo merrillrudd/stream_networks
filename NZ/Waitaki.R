@@ -53,34 +53,12 @@ obs <- nz_waitaki_longfin_eel_downstream[["observations"]] %>%
     rename('present' = data_value)
 
 ## habitat data
-hab <- nz_waitaki_longfin_eel_downstream[["habitat"]]
-hab <- hab %>% filter(covariate %in% c("upElev", "us_tmin") == FALSE)
+hab <- network %>% select('parent_s','child_s','easting','northing','upElev','sinuosity','MeanFlowCumecs','Dist2Coast_FromMid', 'loc_elev','loc_slope','us_tmin', 'loc_rnvar', 'local_twarm', 'DamAffected')
+hab <- tidyr::gather(hab, covariate, value, -c('parent_s','child_s', 'easting', 'northing'))
 
+covar_toUse <- c('upElev','sinuosity','MeanFlowCumecs','Dist2Coast_FromMid', 'loc_elev','loc_slope','loc_rnvar', 'local_twarm', 'DamAffected')
 
-###################################
-## plot network and observations
-###################################
-
-
-## plot network and observations
-p1 <- ggplot() +
-  geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.5) +
-  geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
-  xlab("Longitude") + ylab("Latitude") +
-  mytheme()
-# ggsave(file.path(fig_dir, "Waitaki.png"), p1)
-
-## plot encounters and non-encounters on network by year
-p2 <- ggplot() +
-  geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.001, alpha=0.2) +
-  geom_point(data = obs, aes(x = long, y = lat, fill = factor(present)), pch=21, cex=1.6,alpha=0.5) +
-  scale_fill_brewer(palette = "Set1") +
-  scale_x_continuous(breaks = round(seq(min(network$long),max(network$long), length.out=3),0)) +
-  xlab("Longitude") + ylab("Latitude") + 
-  guides(fill=guide_legend(title="Encounter")) +
-  facet_wrap(~year) +
-  mytheme()
-# ggsave(file.path(fig_dir, "Waitaki_byYear.png"), p2)
+hab <- hab %>% filter(covariate %in% covar_toUse)
 
 
 ####################################
@@ -95,24 +73,6 @@ n_x <- length(nodes)
 n_t <- length(years)
 n_p <- length(covar)
 
-df <- lapply(1:length(covar), function(x){
-  sub <- hab %>% filter(covariate == covar[x])
-  df <- data.frame(sub$value)
-  return(df)
-})
-df <- do.call(cbind, df)
-colnames(df) <- covar
-
-
-# png(file.path(fig_dir, "Habitat_pairs.png"), width=15, height=10, units='in', res=200)
-# pairs(df, upper.panel=panel.cor)
-# dev.off()
-
-
-hab_toUse <- hab %>% filter(covariate %in% covar)
-
-# hab_toPlot <- inner_join(network, hab_toUse %>% select(-'parent_s'))
-
 # for(i in 1:length(covar_toUse)){
 #   p <- ggplot(hab_toPlot %>% filter(covariate == covar_toUse[i])) +
 #   geom_point(aes(x = long, y = lat, color = value)) +
@@ -122,22 +82,21 @@ hab_toUse <- hab %>% filter(covariate %in% covar)
 #   ggsave(file.path(fig_dir, paste0("Habitat_covariate_", covar_toUse[i],".png")),p)
 # }
 
-covar1 <- covar
-X_gtp_1 <- array(0, dim=c(n_x, n_t, n_p))
+X_gtp_input1 <- array(0, dim=c(n_x, n_t, n_p))
 for(p in 1:n_p){
-  psub <- hab_toUse %>% filter(covariate == covar[p])
+  psub <- hab %>% filter(covariate == covar[p])
   mat <- matrix(0, nrow=n_x, ncol = 1)
   mat[psub$child_s,1] <- psub$value
   if(covar[p]=="DamAffected"){
-    X_gtp_1[,,p] <- mat
+    X_gtp_input1[,,p] <- mat
   } else {
       mat_sd <- (mat - mean(mat, na.rm=TRUE))/sd(mat, na.rm=TRUE)
-      X_gtp_1[,,p] <- mat_sd
+      X_gtp_input1[,,p] <- mat_sd
   }
 }
 
 ## years since dam impact
-X_choose <- X_gtp_1[,,which(covar == "DamAffected")]
+X_choose <- X_gtp_input1[,,which(covar == "DamAffected")]
 X_gtp1 <- sapply(1:length(years), function(x){
   sub <- X_choose[,x]
   sub[which(sub == 1)] <- years[x] - 1935
@@ -153,20 +112,14 @@ X_gtp2 <- sapply(1:length(years), function(x){
 })
 X_gtp2_sd <- (X_gtp2 - mean(X_gtp2))/sd(X_gtp2)
 
-covar2 <- covar[-which(covar=="DamAffected")]
-covar2 <- c(covar2, "YearsSinceDam")#,"YearsSinceDam2")
-X_gtp_2 <- array(0, dim=c(n_x,n_t,n_p))#+1))
+covar2 <- c(covar, "YearsSinceDam","YearsSinceDam2")
+n_p <- length(covar2)
+X_gtp_input <- array(0, dim=c(n_x,n_t,n_p))#+1))
 for(p in 1:(n_p)){#+1)){
-  if(p < n_p) X_gtp_2[,,p] <- X_gtp_1[,,p]
-  if(p == n_p) X_gtp_2[,,p] <- X_gtp1_sd
-  # if(p > n_p) X_gtp_2[,,p] <- X_gtp2_sd
+  if(p <= length(covar)) X_gtp_input[,,p] <- X_gtp_input1[,,p]
+  if(p == length(covar)+1) X_gtp_input[,,p] <- X_gtp1_sd
+  if(p ==length(covar)+2) X_gtp_input[,,p] <- X_gtp2_sd
 }
-
-X_gtp_2_2000 <- X_gtp_2[,which(years >= 2000),]
-X_gtp_2_1980 <- X_gtp_2[,which(years >= 1980),]
-
-Xconfig_zcp_inp <- array(0, dim=c(2,1,n_p))
-Xconfig_zcp_inp[1,,] <- 1 
 
 ##################################
 ## save data used for model runs
@@ -174,7 +127,7 @@ Xconfig_zcp_inp[1,,] <- 1
 
 saveRDS(obs, file.path(res_dir, "observations.rds"))
 saveRDS(network, file.path(res_dir, "network.rds"))
-saveRDS(hab_toUse, file.path(res_dir, "habitat.rds"))
+saveRDS(hab, file.path(res_dir, "habitat.rds"))
 
 
 ##### add small value to encounter observations
@@ -193,6 +146,35 @@ Data_Geostat <- data.frame( "Catch_KG" = present_new,
                "Pass" = 0,
                "Knot" = obs$child_i,
                "Category" = "Longfin_eels")
+
+
+plot_network(Network_sz_LL = Network_sz_LL, Data_Geostat = Data_Geostat, FileName = fig_dir)
+
+
+###################################
+## plot network and observations
+###################################
+
+
+# ## plot network and observations
+# p1 <- ggplot() +
+#   geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.5, alpha=0.5) +
+#   geom_point(data = obs, aes(x = long, y = lat), pch=19, cex=2, color="red", alpha=0.8) +
+#   xlab("Longitude") + ylab("Latitude") +
+#   mytheme()
+# # ggsave(file.path(fig_dir, "Waitaki.png"), p1)
+
+# ## plot encounters and non-encounters on network by year
+# p2 <- ggplot() +
+#   geom_point(data = network, aes(x = long, y = lat), pch=19, cex=0.001, alpha=0.2) +
+#   geom_point(data = obs, aes(x = long, y = lat, fill = factor(present)), pch=21, cex=1.6,alpha=0.5) +
+#   scale_fill_brewer(palette = "Set1") +
+#   scale_x_continuous(breaks = round(seq(min(network$long),max(network$long), length.out=3),0)) +
+#   xlab("Longitude") + ylab("Latitude") + 
+#   guides(fill=guide_legend(title="Encounter")) +
+#   facet_wrap(~year) +
+#   mytheme()
+# # ggsave(file.path(fig_dir, "Waitaki_byYear.png"), p2)
 
 
 ####### temporal model settings

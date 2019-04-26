@@ -25,6 +25,7 @@ library(tidyverse)
 # library(RColorBrewer)
 library(proj4)
 library(RuddR)
+# library(sf)
 
 # ################
 ## Load data
@@ -58,7 +59,11 @@ network_combine <- left_join(network, choose)
 sapply(1:ncol(network_combine), function(x) length(which(is.na(network_combine[,x])))/nrow(network_combine))
 
 
-# sub <- network_combine %>% filter(grepl('aitaki',CatName))
+## wait to adjust widths for smaller areas
+# ## order by northing
+# width <- akima::interp(x = network_combine$easting_child[-which(is.na(network_combine$width))], y = network_combine$northing_child[-which(is.na(network_combine$width))], z = network_combine$width[-which(is.na(network_combine$width))], xo = network_combine$easting_child[which(is.na(network_combine$width))], yo = network_combine$northing_child[which(is.na(network_combine$width))], duplicate = "median")
+
+# # sub <- network_combine %>% filter(grepl('aitaki',CatName))
 
 covar_toUse <- c(covar_toUse, "DamAffected")
 
@@ -292,11 +297,6 @@ nrow(network_full %>% select('lat','long'))
 nrow(network_full %>% select('easting','northing'))
 
 ## map of full NZ network
-nzmap <- ggplot(network_full) +
-		geom_point(aes(x = easting, y = northing), cex=0.2) +
-		xlab("Easting") + ylab("Northing") +
-		mytheme()
-# ggsave(file.path(fig_dir, "NZmap.png"), nzmap)
 
 ## all observations
 # load(file.path(data_dir, "Diadromous fish dataset.Rdata"))
@@ -386,12 +386,6 @@ obs_all <- rbind.data.frame(obs_reformat, waikato_reformat)
 obs_full <- obs_all %>% 
 			rename('parent_i' = parent_s, 'child_i' = child_s)
 
-obsmap <- ggplot() +
-		geom_point(data=network_full, aes(x = easting, y = northing), col = "black", cex=0.2) +
-		geom_point(data=obs_full, aes(x = easting, y = northing, color = data_type)) +
-		xlab("Easting") + ylab("Northing") +
-		mytheme()
-ggsave(file.path(fig_dir, "NZmap_obs.png"), obsmap)
 
 ## select habitat data from network separately
 hab_full <- network_full %>% 
@@ -477,11 +471,29 @@ saveRDS(hab_full, file.path(data_dir, "NZ_habitat.rds"))
 obs_full <- readRDS(file.path(data_dir, "NZ_observations.rds"))
 network_full <- readRDS(file.path(data_dir, "NZ_network.rds"))
 hab_full <- readRDS(file.path(data_dir, "NZ_habitat.rds"))
+
+nzmap <- ggplot(network_full) +
+		geom_point(aes(x = long, y = lat), cex=0.2) +
+		xlab("Longitude") + ylab("Latitude") +
+		mytheme()
+ggsave(file.path(fig_dir, "NZmap.png"), nzmap)
+
+obsmap <- ggplot() +
+		geom_point(data=network_full, aes(x = long, y = lat), col = "black", cex=0.2) +
+		geom_point(data=obs_full %>% filter(data_type=="encounter"), aes(x = long, y = lat, color = data_type)) +
+		xlab("Longitude") + ylab("Latitude") +
+		mytheme()
+ggsave(file.path(fig_dir, "NZmap_obs_encounter.png"), obsmap)
+
 #############################
 ## subset Waitaki catchment
 #############################
 
 network_sub <- network_full %>% filter(grepl("aitaki", CatName))
+
+width_new <- network_sub$width
+width_new[which(is.na(network_sub$width))] <- median(network_sub$width, na.rm=TRUE)
+network_sub$width <- width_new
 
 # net_sub2 <- network_full %>% filter(grepl("hitney", CatName))
 # obs_sub <- obs_full %>% filter(grepl("711",catch_number))
@@ -491,16 +503,6 @@ all(obs_sub$nzsegment %in% network_sub$nzsegment)
 # obs_sub <- obs_sub %>% filter(nzsegment %in% network_sub$nzsegment == TRUE)
 hab_sub <- hab_full %>% filter(child_s %in% network_sub$child_s == TRUE)
 
-catchmap <- ggplot() +
-		geom_point(data=network_sub, aes(x = easting, y = northing), col="black") +
-		geom_point(data=obs_sub, aes(x = easting, y = northing, color = data_type)) +
-		xlab("Easting") + ylab("Northing") +
-		mytheme()
-ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
-
-catchmap2 <- nzmap + 
-	geom_point(data = network_sub, aes(x = easting, y = northing), col = "gray")
-ggsave(file.path(fig_dir, "Waitaki_on_NZ.png"), catchmap2)
 
 #############################
 ## format
@@ -574,6 +576,7 @@ hab_sub2 <- lapply(1:length(covar_toUse), function(x){
 
 			if(length(which(is.na(sub$value)))==1){
 				xx <- sub[(which(is.na(sub$value))-5):(which(is.na(sub$value))+5),]
+				xx2 <- xx[order(xx$easting),]
 				val_inp <- median(xx$value, na.rm=TRUE)
 				sub$value[which(is.na(sub$value))] <- val_inp
 			}
@@ -607,9 +610,32 @@ obs_sub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 network_sub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
 hab_sub <- readRDS(file.path(data_dir, "Waitaki_habitat.rds"))
 
+catchmap <- ggplot() +
+		geom_point(data=network_sub, aes(x = long, y = lat), col="gray") +
+		geom_point(data=obs_sub, aes(x = long, y = lat, fill = data_type), pch=22, alpha=0.6) +
+		scale_fill_brewer(palette = "Set1") +
+		xlab("Longitude") + ylab("Latitude") +
+		guides(fill = FALSE) +
+		mytheme()
+ggsave(file.path(fig_dir, "Waitaki_map.png"), catchmap)
+
+catchmap2 <- ggplot() +
+		geom_point(data=network_full, aes(x = long, y = lat), col = "black", cex=0.2) +
+		geom_point(data = network_sub, aes(x = long, y = lat), col = "gray") +
+		# geom_point(data=obs_full %>% filter(data_type=="encounter"), aes(x = long, y = lat, fill=data_type), pch=22, alpha=0.6) +
+		xlab("Longitude") + ylab("Latitude") +
+		# scale_fill_brewer(palette = "Set1") +
+		mytheme()
+ggsave(file.path(fig_dir, "Waitaki_on_NZ.png"), catchmap2)
+
 #########################################
 ## Waitaki catchment downstream segments
 #########################################
+
+# loc_df <- hab_sub %>% select('easting', 'northing')
+# loc_mat <- as.matrix(loc_df)
+# loc <- st_linestring(loc_mat)
+# loc_simp <- st_simplify(loc, dTolerance = 5)
 
 obs_child <- unique(obs_sub$child_i)
 
@@ -660,17 +686,34 @@ hab_children <- sapply(1:nrow(hab_sub2), function(x) inodes[which(nodes == hab_s
 hab_sub2$parent_s <- hab_parents
 hab_sub2$child_s <- hab_children
 
-catchmap <- ggplot() +
-		geom_point(data=network_sub2, aes(x = easting, y = northing), col="black") +
-		geom_point(data=obs_sub2, aes(x = easting, y = northing, color = data_type)) +
-		xlab("Easting") + ylab("Northing") +
-		mytheme()
-ggsave(file.path(fig_dir, "Waitaki_map_downstream.png"), catchmap)
-
 
 saveRDS(obs_sub2, file.path(data_dir, "Waitaki_observations_downstreamOnly.rds"))
 saveRDS(network_sub2, file.path(data_dir, "Waitaki_network_downstreamOnly.rds"))
 saveRDS(hab_sub2, file.path(data_dir, "Waitaki_habitat_downstreamOnly.rds"))
+
+obs_sub2 <- readRDS(file.path(data_dir, "Waitaki_observations_downstreamOnly.rds"))
+network_sub2 <- readRDS(file.path(data_dir, "Waitaki_network_downstreamOnly.rds"))
+
+		l2 <- lapply(1:nrow(network_sub2), function(x){
+			parent <- network_sub2$parent_s[x]
+			find <- network_sub2 %>% filter(child_s == parent)
+			if(nrow(find)>0) out <- cbind.data.frame(network_sub2[x,], 'long2'=find$long, 'lat2'=find$lat)
+			if(nrow(find)==0) out <- cbind.data.frame(network_sub2[x,], 'long2'=NA, 'lat2'=NA)
+			# if(nrow(find)>0) out <- cbind.data.frame(network_sub2[x,], 'long2'=find$long, 'lat2'=find$lat)
+			# if(nrow(find)==0) out <- cbind.data.frame(network_sub2[x,], 'long2'=NA, 'lat2'=NA)
+			return(out)
+		})
+		l2 <- do.call(rbind, l2)
+
+catchmap <- ggplot() +
+		geom_point(data=network_sub2, aes(x = long, y = lat), col="gray") +
+		geom_segment(data=l2, aes(x = long2,y = lat2, xend = long, yend = lat), col="gray") +
+		geom_point(data=obs_sub2, aes(x = long, y = lat, fill = data_type), pch=22, alpha=0.6) +
+		scale_fill_brewer(palette = "Set1") +
+		xlab("Longitude") + ylab("Latitude") +
+		guides(fill = FALSE) +
+		mytheme()
+ggsave(file.path(fig_dir, "Waitaki_map_downstream.png"), catchmap)
 
 
 #############################
@@ -741,7 +784,7 @@ network_sub_wk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
 hab_sub_wk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
 
 #########################################
-## Waitaki catchment downstream segments
+## Waikato catchment downstream segments
 #########################################
 
 obs_sub_wk2 <- obs_sub_wk %>% filter(is.na(dist_i)==FALSE)
@@ -822,23 +865,23 @@ saveRDS(hab_sub_wk2, file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
 obsfull <- readRDS(file.path(data_dir, "NZ_observations.rds"))
 obssub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 obssub2 <- readRDS(file.path(data_dir, "Waitaki_observations_downstreamOnly.rds"))
-obssubwk <- readRDS(file.path(data_dir, "Waikato_observations.rds"))
-obssubwk2 <- readRDS(file.path(data_dir, "Waikato_observations_downstreamOnly.rds"))
+# obssubwk <- readRDS(file.path(data_dir, "Waikato_observations.rds"))
+# obssubwk2 <- readRDS(file.path(data_dir, "Waikato_observations_downstreamOnly.rds"))
 
 netfull <- readRDS(file.path(data_dir, "NZ_network.rds"))
 netsub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
 netsub2 <- readRDS(file.path(data_dir, "Waitaki_network_downstreamOnly.rds"))
-netsubwk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
-netsubwk2 <- readRDS(file.path(data_dir, "Waikato_network_downstreamOnly.rds"))
+# netsubwk <- readRDS(file.path(data_dir, "Waikato_network.rds"))
+# netsubwk2 <- readRDS(file.path(data_dir, "Waikato_network_downstreamOnly.rds"))
 
 
 habfull <- readRDS(file.path(data_dir, "NZ_habitat.rds"))
 habsub <- readRDS(file.path(data_dir, "Waitaki_habitat.rds"))
 habsub2 <- readRDS(file.path(data_dir, "Waitaki_habitat_downstreamOnly.rds"))
-habsubwk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
-habsubwk2 <- readRDS(file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
+# habsubwk <- readRDS(file.path(data_dir, "Waikato_habitat.rds"))
+# habsubwk2 <- readRDS(file.path(data_dir, "Waikato_habitat_downstreamOnly.rds"))
 
-
+data_dir2 <- file.path("C:\\merrill\\stream_networks\\NZ\\data_save")
 ## save rda
 nz_longfin_eel <- list()
 nz_longfin_eel$observations <- obsfull
