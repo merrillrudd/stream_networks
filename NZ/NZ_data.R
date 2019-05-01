@@ -599,8 +599,59 @@ hab_sub2 <- lapply(1:length(covar_toUse), function(x){
 })
 check <- sapply(1:length(hab_sub2), function(x) any(is.na(hab_sub2[[x]]$value)))
 all(check == FALSE)
-
 hab_sub2 <- do.call(rbind, hab_sub2)
+
+find0 <- sapply(1:length(covar_toUse), function(x){
+	sub <- hab_sub2 %>% filter(covariate == covar_toUse[x])
+	any(sub$value==0)
+})
+names(find0) <- covar_toUse
+
+hab_sub3 <- lapply(1:length(covar_toUse), function(x){
+	sub <- hab_sub2 %>% filter(covariate == covar_toUse[x])
+	# any(is.na(sub$value))
+	if(any(sub$value == 0)){
+
+		if(covar_toUse[x]!="DamAffected"){
+			interp_east <- sub$easting[which(sub$value != 0)]
+			interp_north <- sub$northing[which(sub$value != 0)]
+			interp_z <- sub$value[which(sub$value != 0)]	
+
+			find_df <- data.frame('east' = sub$easting[which(sub$value == 0)], 'north' = sub$northing[which(sub$value == 0)])	
+
+			east <- sub$easting[order(sub$easting)]
+			north <- sub$northing[order(sub$northing)]
+			# mat2 <- zoo::na.approx(object = mat)
+			compute <- akima::interp(x = interp_east, y = interp_north, z = interp_z, xo=east, yo=north, extrap=TRUE)
+			mat2 <- compute$z	
+
+			vals <- sapply(1:nrow(find_df), function(y){
+				mat2[which(compute$x == find_df$east[y]), which(compute$y == find_df$north[y])]
+			})	
+
+			inp_vals <- sub$value
+			inp_vals[which(inp_vals == 0)] <- vals	
+
+			sub$value <- inp_vals	
+
+			if(length(which(sub$value == 0))==1){
+				xx <- sub[(which(sub$value == 0)-5):(which(sub$value == 0)+5),]
+				xx2 <- xx[order(xx$easting),]
+				val_inp <- median(xx$value, na.rm=TRUE)
+				sub$value[which(sub$value == 0)] <- val_inp
+			}
+		}
+	}
+	print(any(sub$value == 0))
+	return(sub)
+})
+check <- sapply(1:length(hab_sub3), function(x) any(hab_sub3[[x]]$value == 0))
+all(check == FALSE)
+hab_sub3 <- do.call(rbind, hab_sub3)
+
+
+
+
 
 saveRDS(obs_sub, file.path(data_dir, "Waitaki_observations.rds"))
 saveRDS(network_sub, file.path(data_dir, "Waitaki_network.rds"))
