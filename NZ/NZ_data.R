@@ -655,7 +655,7 @@ hab_sub3 <- do.call(rbind, hab_sub3)
 
 saveRDS(obs_sub, file.path(data_dir, "Waitaki_observations.rds"))
 saveRDS(network_sub, file.path(data_dir, "Waitaki_network.rds"))
-saveRDS(hab_sub2, file.path(data_dir, "Waitaki_habitat.rds"))
+saveRDS(hab_sub3, file.path(data_dir, "Waitaki_habitat.rds"))
 
 obs_sub <- readRDS(file.path(data_dir, "Waitaki_observations.rds"))
 network_sub <- readRDS(file.path(data_dir, "Waitaki_network.rds"))
