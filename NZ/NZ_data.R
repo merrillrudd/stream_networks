@@ -493,7 +493,10 @@ network_sub <- network_full %>% filter(grepl("aitaki", CatName))
 
 width_new <- network_sub$width
 width_new[which(is.na(network_sub$width))] <- median(network_sub$width, na.rm=TRUE)
+dist_new <- network_sub$dist_s
+dist_new[which(is.na(network_sub$dist_s))] <- median(network_sub$dist_s, na.rm=TRUE)
 network_sub$width <- width_new
+network_sub$dist_s <- dist_new
 
 # net_sub2 <- network_full %>% filter(grepl("hitney", CatName))
 # obs_sub <- obs_full %>% filter(grepl("711",catch_number))
