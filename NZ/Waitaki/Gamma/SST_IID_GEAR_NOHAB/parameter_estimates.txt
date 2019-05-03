@@ -1,0 +1,70 @@
+$par
+    lambda1_k     lambda1_k     lambda1_k    L_omega1_z  L_epsilon1_z     L_beta1_z 
+-2.784602e+00 -2.387683e+01 -5.402197e-01  1.413760e+00  1.651327e+00 -3.545047e-15 
+    logkappa1  Beta_mean1_c      beta2_ft     logSigmaM 
+-5.561860e-02 -4.602067e+00  9.713989e+00  3.996548e-01 
+
+$objective
+[1] 517.0598
+attr(,"logarithm")
+[1] TRUE
+
+$iterations
+[1] 4
+
+$evaluations
+function gradient 
+       7        4 
+
+$time_for_MLE
+Time difference of 1.598797 mins
+
+$max_gradient
+[1] 1.361911e-06
+
+$Convergence_check
+[1] "There is no evidence that the model is not converged"
+
+$number_of_coefficients
+ Total  Fixed Random 
+203289     10 203279 
+
+$AIC
+[1] 1054.12
+attr(,"logarithm")
+[1] TRUE
+
+$diagnostics
+          Param starting_value Lower           MLE Upper final_gradient
+1     lambda1_k  -2.784602e+00  -Inf -2.784602e+00   Inf   5.434880e-10
+2     lambda1_k  -2.087665e+01  -Inf -2.387683e+01   Inf   8.797615e-10
+3     lambda1_k  -5.402197e-01  -Inf -5.402197e-01   Inf   4.160557e-10
+4    L_omega1_z   1.413760e+00  -Inf  1.413760e+00   Inf   4.770229e-09
+5  L_epsilon1_z   1.651326e+00  -Inf  1.651327e+00   Inf   5.932071e-09
+6     L_beta1_z   2.529821e-12  -Inf -3.545047e-15   Inf  -2.287688e-14
+7     logkappa1  -5.561911e-02  -Inf -5.561860e-02   Inf   1.361911e-06
+8  Beta_mean1_c  -4.602067e+00  -Inf -4.602067e+00   Inf   4.164182e-09
+9      beta2_ft   9.713989e+00  -Inf  9.713989e+00   Inf  -2.920989e-14
+10    logSigmaM   3.996548e-01  -Inf  3.996548e-01    10  -3.629638e-14
+
+$SD
+sdreport(.) result
+                  Estimate   Std. Error
+lambda1_k    -2.784602e+00 1.213785e+00
+lambda1_k    -2.387683e+01 3.371921e+04
+lambda1_k    -5.402197e-01 9.331191e-01
+L_omega1_z    1.413760e+00 4.307963e-01
+L_epsilon1_z  1.651327e+00 5.205693e-01
+L_beta1_z    -3.545047e-15 3.936521e-01
+logkappa1    -5.561860e-02 5.302011e-01
+Beta_mean1_c -4.602067e+00 6.717938e-01
+beta2_ft      9.713989e+00 1.546416e-01
+logSigmaM     3.996548e-01 5.994158e-02
+Maximum gradient component: 1.361911e-06 
+
+$time_for_sdreport
+Time difference of 14.99842 mins
+
+$time_for_run
+Time difference of 16.64114 mins
+
