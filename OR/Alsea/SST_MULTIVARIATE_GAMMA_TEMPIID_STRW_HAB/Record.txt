@@ -1,0 +1,57 @@
+$Version
+[1] "VAST_v8_0_0"
+
+$n_x
+[1] 1954
+
+$Region
+[1] "Stream_network"
+
+$strata.limits
+     STRATA
+1 All_areas
+
+$zone
+[1] NA
+
+$FieldConfig
+  Omega1 Epsilon1   Omega2 Epsilon2 
+   "IID"    "IID"    "IID"    "IID" 
+
+$RhoConfig
+   Beta1    Beta2 Epsilon1 Epsilon2 
+       1        1        2        2 
+
+$VamConfig
+Method   Rank Timing 
+     0      0      0 
+
+$OverdispersionConfig
+Eta1 Eta2 
+   0    0 
+
+$ObsModel
+[1] 2 0
+
+$vars_to_correct
+[1] "Index_cyl"
+
+$Options
+         Calculate_Range Calculate_effective_area 
+                       1                        1 
+
+$grid_size_km
+[1] 1
+
+$Method
+[1] "Stream_network"
+
+$use_anisotropy
+[1] TRUE
+
+$fine_scale
+[1] FALSE
+
+$bias.correct
+[1] TRUE
+

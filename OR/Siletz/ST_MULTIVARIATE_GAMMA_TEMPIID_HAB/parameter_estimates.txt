@@ -1,0 +1,103 @@
+$par
+   gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp 
+-7.009942e-01 -5.155355e+01  1.927711e+00  5.514955e+01 -3.625461e-02  1.028209e+01 
+   gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp 
+-9.036731e-01 -3.549409e-01  3.953785e-01  2.280080e+01  7.818661e-01  6.886028e+00 
+   gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp    gamma1_ctp 
+ 4.952463e-01 -3.888585e+01  1.000162e+00  1.410934e+01  3.828131e-01  3.711596e+01 
+   L_omega1_z    L_omega1_z  L_epsilon1_z  L_epsilon1_z     L_beta1_z     L_beta1_z 
+ 1.899638e+00  5.006877e+02  1.323457e+00  1.386877e-02  1.799434e+00 -2.471680e+02 
+    logkappa1  Beta_mean1_c  Beta_mean1_c    gamma2_ctp    gamma2_ctp    gamma2_ctp 
+-3.406427e+00  3.301139e+00  1.576896e+02 -2.675251e-01  5.026356e-01  3.417808e-03 
+   gamma2_ctp    gamma2_ctp    gamma2_ctp    gamma2_ctp    gamma2_ctp    gamma2_ctp 
+ 1.275867e-02 -5.595771e-02  1.642822e-01  4.685956e-01 -1.463437e-01  1.894790e-02 
+   gamma2_ctp    gamma2_ctp    gamma2_ctp    gamma2_ctp    gamma2_ctp    gamma2_ctp 
+-3.637067e-01  1.110738e-01 -2.605650e-01  2.840343e-01  2.715458e-01  2.742585e-01 
+   gamma2_ctp    gamma2_ctp    gamma2_ctp     L_beta2_z     L_beta2_z  Beta_mean2_c 
+ 6.268185e-01  9.958162e-02  1.883049e-01  8.506547e-01 -1.542351e-07  3.276125e+00 
+ Beta_mean2_c     logSigmaM     logSigmaM 
+ 5.888754e+00 -1.663157e-01  4.330059e-02 
+
+$objective
+[1] 2189.638
+
+$iterations
+[1] 302
+
+$evaluations
+function gradient 
+     367      303 
+
+$time_for_MLE
+Time difference of 3.826298 mins
+
+$max_gradient
+[1] 0.0005072957
+
+$Convergence_check
+[1] "The model is likely not converged"
+
+$number_of_coefficients
+ Total  Fixed Random 
+ 69303     51  69252 
+
+$AIC
+[1] 4481.275
+
+$diagnostics
+          Param starting_value Lower           MLE Upper final_gradient
+1    gamma1_ctp      0.1000000  -Inf -7.009942e-01   Inf  -6.243775e-06
+2    gamma1_ctp      0.1000000  -Inf -5.155355e+01   Inf  -1.139612e-05
+3    gamma1_ctp      0.1000000  -Inf  1.927711e+00   Inf  -1.028203e-05
+4    gamma1_ctp      0.1000000  -Inf  5.514955e+01   Inf  -1.377567e-05
+5    gamma1_ctp      0.1000000  -Inf -3.625461e-02   Inf  -1.286168e-05
+6    gamma1_ctp      0.1000000  -Inf  1.028209e+01   Inf   3.422093e-05
+7    gamma1_ctp      0.1000000  -Inf -9.036731e-01   Inf   5.318025e-06
+8    gamma1_ctp      0.1000000  -Inf -3.549409e-01   Inf   9.900260e-06
+9    gamma1_ctp      0.1000000  -Inf  3.953785e-01   Inf   1.282543e-05
+10   gamma1_ctp      0.1000000  -Inf  2.280080e+01   Inf  -6.987995e-07
+11   gamma1_ctp      0.1000000  -Inf  7.818661e-01   Inf  -1.626661e-05
+12   gamma1_ctp      0.1000000  -Inf  6.886028e+00   Inf   3.257622e-05
+13   gamma1_ctp      0.1000000  -Inf  4.952463e-01   Inf   6.910795e-06
+14   gamma1_ctp      0.1000000  -Inf -3.888585e+01   Inf   1.092227e-05
+15   gamma1_ctp      0.1000000  -Inf  1.000162e+00   Inf   2.125231e-05
+16   gamma1_ctp      0.1000000  -Inf  1.410934e+01   Inf  -6.619536e-07
+17   gamma1_ctp      0.1000000  -Inf  3.828131e-01   Inf   2.777212e-06
+18   gamma1_ctp      0.1000000  -Inf  3.711596e+01   Inf   8.108394e-06
+19   L_omega1_z      1.0000000  -Inf  1.899638e+00   Inf   4.924346e-06
+20   L_omega1_z      1.0000000  -Inf  5.006877e+02   Inf  -6.986372e-07
+21 L_epsilon1_z      1.0000000  -Inf  1.323457e+00   Inf  -9.667071e-06
+22 L_epsilon1_z      1.0000000  -Inf  1.386877e-02   Inf   4.688107e-07
+23    L_beta1_z      1.0000000  -Inf  1.799434e+00   Inf   4.153250e-06
+24    L_beta1_z      1.0000000  -Inf -2.471680e+02   Inf  -6.422171e-07
+25    logkappa1     -0.1053605  -Inf -3.406427e+00   Inf   5.072957e-04
+26 Beta_mean1_c      0.0000000  -Inf  3.301139e+00   Inf   4.881276e-06
+27 Beta_mean1_c      0.0000000  -Inf  1.576896e+02   Inf   1.949678e-06
+28   gamma2_ctp      0.1000000  -Inf -2.675251e-01   Inf  -5.345189e-05
+29   gamma2_ctp      0.1000000  -Inf  5.026356e-01   Inf  -2.649176e-05
+30   gamma2_ctp      0.1000000  -Inf  3.417808e-03   Inf  -7.584874e-06
+31   gamma2_ctp      0.1000000  -Inf  1.275867e-02   Inf  -7.476252e-06
+32   gamma2_ctp      0.1000000  -Inf -5.595771e-02   Inf   2.859943e-05
+33   gamma2_ctp      0.1000000  -Inf  1.642822e-01   Inf   2.248091e-05
+34   gamma2_ctp      0.1000000  -Inf  4.685956e-01   Inf  -2.379657e-05
+35   gamma2_ctp      0.1000000  -Inf -1.463437e-01   Inf  -8.218796e-06
+36   gamma2_ctp      0.1000000  -Inf  1.894790e-02   Inf   4.084962e-05
+37   gamma2_ctp      0.1000000  -Inf -3.637067e-01   Inf  -8.364887e-05
+38   gamma2_ctp      0.1000000  -Inf  1.110738e-01   Inf  -4.887733e-05
+39   gamma2_ctp      0.1000000  -Inf -2.605650e-01   Inf  -1.703508e-05
+40   gamma2_ctp      0.1000000  -Inf  2.840343e-01   Inf   6.814274e-06
+41   gamma2_ctp      0.1000000  -Inf  2.715458e-01   Inf  -1.295573e-05
+42   gamma2_ctp      0.1000000  -Inf  2.742585e-01   Inf   1.971774e-06
+43   gamma2_ctp      0.1000000  -Inf  6.268185e-01   Inf  -2.403674e-05
+44   gamma2_ctp      0.1000000  -Inf  9.958162e-02   Inf  -4.831724e-05
+45   gamma2_ctp      0.1000000  -Inf  1.883049e-01   Inf  -1.725554e-05
+46    L_beta2_z      1.0000000  -Inf  8.506547e-01   Inf  -4.004674e-05
+47    L_beta2_z      1.0000000  -Inf -1.542351e-07   Inf  -2.950923e-06
+48 Beta_mean2_c      0.0000000  -Inf  3.276125e+00   Inf   3.934564e-05
+49 Beta_mean2_c      0.0000000  -Inf  5.888754e+00   Inf  -1.217095e-05
+50    logSigmaM      1.6094379  -Inf -1.663157e-01    10   8.787996e-05
+51    logSigmaM      1.6094379  -Inf  4.330059e-02    10   6.303316e-05
+
+$time_for_run
+Time difference of 3.832681 mins
+
