@@ -38,6 +38,11 @@ library(RuddR)
 library(foreach)
 library(doParallel)
 
+### create previously saved data into Rdata file
+obs <- readRDS(file.path(res_dir, "observations.rds"))
+net <- readRDS(file.path(res_dir, "network.rds"))
+hab <- readRDS(file.path(res_dir, "habitat.rds"))
+
 #########################
 ## read in data
 ##########################
@@ -100,16 +105,14 @@ Network_sz_LL = network %>% select(c('parent_s', 'child_s', 'dist_s', 'lat', 'lo
 
 obs_spawn <- spawn %>% 
     select("SpawnYear", "adults_per_km", "lat", "long", "ChildNode") %>%
-    rename("year"="SpawnYear", "observation"="adults_per_km","child_i"="ChildNode") %>%
-    mutate("obs_type"="spawners") %>%
+    rename("year"="SpawnYear", "value"="adults_per_km","child_i"="ChildNode") %>%
     mutate('surveynum' = 1) %>%
     mutate('survey'="spawners")
 
 obs_juv <- juv %>%
     select("JuvYear", "parr_per_k", "lat", "long","ChildNode") %>%
-    rename("year"="JuvYear", "observation"="parr_per_k","child_i"="ChildNode") %>%
+    rename("year"="JuvYear", "value"="parr_per_k","child_i"="ChildNode") %>%
     na.omit() %>%
-    mutate("obs_type"="juveniles") %>% 
     mutate("surveynum" = 2) %>%
     mutate("survey" = "juveniles")
 
@@ -125,7 +128,9 @@ hab <- hab_raw %>%
 dcovar <- c("PCTSCCHNLA","ACW","PCTSWPOOL","POOL1P_KM","POOLS100","RIFFLEDEP","LWDVOL1","WGTED_SLOPE_GRAVEL","WGTED_ALLUNITS_BEDROCK")
 dcovar_names <- c("Percent secondary channel area", "Active channel width", "Percent slack water pools","Deep pools per km","Pools per 100m reach","Riffle depth", "Volume large wood 100m","Weighted percent gravel in riffles","Weighted percent bedrock")
 
-hab_df <- hab %>% tidyr::gather(key="obs_type", value="observation", PCTSCCHNLA:WGTED_ALLUNITS_BEDROCK) %>% mutate('survey'="habitat")
+hab_df <- hab %>% tidyr::gather(key="variable", value="value", PCTSCCHNLA:WGTED_ALLUNITS_BEDROCK) %>% mutate('survey'="habitat")
+saveRDS(hab_df, file.path(res_dir, "habitat.rds"))
+
 hab_addYr <- lapply(1:length(years), function(x){
   out <- hab_df
   out$year <- years[x]
@@ -134,19 +139,17 @@ hab_addYr <- lapply(1:length(years), function(x){
 hab_addYr <- do.call(rbind, hab_addYr)
 hab_addYr <- hab_addYr %>% mutate('surveynum'=3)
 
-  obs_all <- rbind.data.frame(obs_dens, hab_addYr)
-
 
 ##################################
 ## save data used for model runs
 ##################################
 
-saveRDS(obs_all, file.path(res_dir, "observations.rds"))
+saveRDS(obs_dens, file.path(res_dir, "observations.rds"))
 saveRDS(network, file.path(res_dir, "network.rds"))
 
 ##### setup data frame
 ## density = individuals per kilometer
-Data_Geostat <- data.frame( "Catch_KG" = obs_dens$observation, 
+Data_Geostat <- data.frame( "Catch_KG" = obs_dens$value, 
               "Year" = as.numeric(obs_dens$year),
                "Vessel" = "missing", 
                "AreaSwept_km2" = 1, 
@@ -165,15 +168,15 @@ plot_network(Network_sz_LL, Data_Geostat, FileName=fig_dir, root=TRUE)
 
 hab_interp <- lapply(1:length(dcovar), function(p){
 	## smooth across space
-	habsub <- hab_df %>% filter(obs_type == dcovar[p])	
+	habsub <- hab_df %>% filter(variable == dcovar[p])	
 
 	interp_lat <- habsub$lat
 	interp_lon <- habsub$long
-	interp_z <- habsub$observation	
+	interp_z <- habsub$value	
 
 	p1 <- ggplot(habsub) +
 	geom_point(data=Network_sz_LL, aes(x=Lon,y=Lat), color="gray", alpha=0.5)+
-	geom_point(aes(x = long, y = lat, color=observation), cex=3) +
+	geom_point(aes(x = long, y = lat, color=value), cex=3) +
 	ggtitle(paste0(dcovar_names[p], " (", dcovar[p], ")")) +
 	xlab("Longitude") + ylab("Latitude") +
 	scale_color_viridis_c() +
@@ -187,11 +190,11 @@ hab_interp <- lapply(1:length(dcovar), function(p){
 	# compute <- akima::interp(x = interp_lon, y = interp_lat, z = interp_z, xo = find_lon, yo=find_lat, linear=FALSE, extrap=TRUE, duplicate = "mean")
 	compute <- akima::interpp(x = interp_lat, y = interp_lon, z = interp_z, xo=find_lat, yo=find_lon, duplicate = "mean", extrap=TRUE)	
 
-	interp_df <- data.frame('lat'=find_lat, 'lon'=find_lon, 'observation'=compute$z, 'child_i'=find_child)		
+	interp_df <- data.frame('lat'=find_lat, 'lon'=find_lon, 'value'=compute$z, 'child_i'=find_child)		
 
 	p2 <- ggplot(interp_df)+
-	geom_point(aes(x=lon,y=lat,color=observation)) +
-	geom_point(data=habsub, aes(x=long, y=lat, fill=observation), pch=22, cex=3) +
+	geom_point(aes(x=lon,y=lat,color=value)) +
+	geom_point(data=habsub, aes(x=long, y=lat, fill=value), pch=22, cex=3) +
 	guides(fill = FALSE) +
 	ggtitle(paste0(dcovar_names[p], " (", dcovar[p], ")", " interpolated (v1)")) +
 	xlab("Longitude") + ylab("Longitude") +
@@ -200,14 +203,14 @@ hab_interp <- lapply(1:length(dcovar), function(p){
 	mytheme()	
 	ggsave(file.path(fig_dir, paste0(dcovar[p], "_interpolated_v1.png")),p2)
 
-	habsub2 <- habsub %>% select('lat','long','child_i','observation') %>% rename('lon'=long)
+	habsub2 <- habsub %>% select('lat','long','child_i','value') %>% rename('lon'=long)
 	hab_info <- rbind.data.frame(interp_df, habsub2)
-	obs_new <- sapply(1:nrow(hab_info), function(x) ifelse(is.na(hab_info$observation[x]),mean(hab_info$observation,na.rm=TRUE),hab_info$observation[x]))
-	hab_info$observation <- obs_new	
+	obs_new <- sapply(1:nrow(hab_info), function(x) ifelse(is.na(hab_info$value[x]),mean(hab_info$value,na.rm=TRUE),hab_info$value[x]))
+	hab_info$value <- obs_new	
 
 	p3 <- ggplot(hab_info)+
-	geom_point(aes(x=lon,y=lat,color=observation)) +
-	geom_point(data=habsub, aes(x=long, y=lat, fill=observation), pch=22, cex=3) +
+	geom_point(aes(x=lon,y=lat,color=value)) +
+	geom_point(data=habsub, aes(x=long, y=lat, fill=value), pch=22, cex=3) +
 	guides(fill = FALSE) +
 	ggtitle(paste0(dcovar_names[p], " (", dcovar[p], ")", " interpolated")) +
 	xlab("Longitude") + ylab("Longitude") +
@@ -221,7 +224,7 @@ hab_interp <- lapply(1:length(dcovar), function(p){
 		find_hab <- hab_info %>% filter(child_i==child)
 		if(nrow(find_hab)==1) return(find_hab)
 		if(nrow(find_hab)>1){
-			find_hab$observation <- mean(find_hab$observation)
+			find_hab$value <- mean(find_hab$value)
 			return(find_hab[1,])
 		}
 	})
@@ -230,8 +233,8 @@ hab_interp <- lapply(1:length(dcovar), function(p){
 	return(hab_new)
 })
 
-# saveRDS(hab_interp, file.path(res_dir, 'habitat.rds'))
-hab_interp <- readRDS(file.path(res_dir, "habitat.rds"))
+# saveRDS(hab_interp, file.path(res_dir, 'habitat_interp.rds'))
+hab_interp <- readRDS(file.path(res_dir, "habitat_interp.rds"))
 
 nodes <- Network_sz_LL$child_s
 n_x <- nrow(Network_sz_LL)
