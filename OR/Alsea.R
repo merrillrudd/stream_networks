@@ -603,6 +603,160 @@ ObsModel = c(2,0)
 
     plot_residuals(Lat_i=fit$data_frame[,'Lat_i'], Lon_i=fit$data_frame[,'Lon_i'], TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Q=Q, savedir=fig, FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot)
 
+#######################################
+## SST_SPAWNERS_GAMMA_TEMPRW_STRW_HAB
+#######################################
+path <- file.path(res_dir, "SST_SPAWNERS_GAMMA_TEMPRW_STRW_HAB")
+dir.create(path, showWarnings=FALSE)
+fig <- file.path(path, "figures")
+dir.create(fig)
+
+msub <- strsplit(path, "Siletz/")[[1]][2]
+msubx <- strsplit(msub, "_")[[1]]
+
+ignore <- file.copy(from = file.path(res_dir, "VAST_v8_0_0.cpp"), to = path)
+ignore <- file.copy(from = file.path(res_dir, "VAST_v8_0_0.dll"), to = path)
+ignore <- file.copy(from = file.path(res_dir, "VAST_v8_0_0.o"), to = path)
+
+Data_Geostat_inp <- Data_Geostat %>% filter(CategoryNum==1)
+X_gtp_inp <- X_gtp_input[,-length(years),]
+X_itp_inp <- X_itp_input[which(Data_Geostat$CategoryNum==1),-length(years),]
+
+FieldConfig = c("Omega1"="IID", "Epsilon1"="IID", "Omega2"="IID", "Epsilon2"="IID")
+RhoConfig = c("Beta1"=2, "Beta2"=2, "Epsilon1"=2, "Epsilon2"=2)
+OverdispersionConfig = c("Eta1"=0, "Eta2"=0)
+Options =  c("Calculate_Range"=1, 
+            "Calculate_effective_area"=1)
+ObsModel = c(2,0)
+
+  settings <- make_settings(n_x = nrow(Network_sz), Region = "Stream_network", FieldConfig=FieldConfig, RhoConfig=RhoConfig, OverdispersionConfig=OverdispersionConfig, Options=Options, ObsModel=ObsModel, purpose = "index", fine_scale=FALSE )
+  settings$Method <- "Stream_network"
+  settings$grid_size_km <- 1
+
+  # check estimated parameters
+  fit0 = fit_model( "settings"=settings, 
+                  "Lat_i"=Data_Geostat_inp[,"Lat"], 
+                  "Lon_i"=Data_Geostat_inp[,"Lon"], 
+                  "t_iz"=Data_Geostat_inp[,'Year'], 
+                  "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
+                  "b_i"=Data_Geostat_inp[,'Catch_KG'], 
+                  "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
+                  "v_i"=Data_Geostat_inp[,'Vessel'], 
+                  working_dir=path, 
+                  extrapolation_args=list(
+                    input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]), 
+                    Network_sz_LL=Network_sz_LL),
+                  Network_sz = Network_sz,
+                  X_gtp=X_gtp_inp, X_itp=X_itp_inp,
+                  run_model = FALSE)
+
+  # first model run
+  fit1 = fit_model( "settings"=settings, 
+                  "Lat_i"=Data_Geostat_inp[,"Lat"], 
+                  "Lon_i"=Data_Geostat_inp[,"Lon"], 
+                  "t_iz"=Data_Geostat_inp[,'Year'], 
+                  "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
+                  "b_i"=Data_Geostat_inp[,'Catch_KG'], 
+                  "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
+                  "v_i"=Data_Geostat_inp[,'Vessel'], 
+                  working_dir=path, 
+                  extrapolation_args=list(
+                    input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]), 
+                    Network_sz_LL=Network_sz_LL),
+                  Network_sz = Network_sz,
+                  X_gtp=X_gtp_inp, X_itp=X_itp_inp,
+                  optimize_args = list(getsd=FALSE, newtonsteps=0))
+  check <- TMBhelper::Check_Identifiable(fit1$tmb_list$Obj) 
+
+
+  Map <- fit0$tmb_list$Map
+  Map$L_omega1_z <- factor(NA)
+  Map$L_epsilon1_z <- factor(NA)
+  Map$L_epsilon2_z <- factor(NA)
+
+  Par <- fit0$tmb_list$Parameters
+  Par$L_omega1_z <- 0
+  Par$L_epsilon1_z <- 0
+  Par$L_epsilon2_z <- 0
+
+  fit2 = fit_model( "settings"=settings, 
+                  "Lat_i"=Data_Geostat_inp[,"Lat"], 
+                  "Lon_i"=Data_Geostat_inp[,"Lon"], 
+                  "t_iz"=Data_Geostat_inp[,'Year'], 
+                  "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
+                  "b_i"=Data_Geostat_inp[,'Catch_KG'], 
+                  "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
+                  "v_i"=Data_Geostat_inp[,'Vessel'], 
+                  working_dir=path, 
+                  extrapolation_args=list(
+                    input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]), 
+                    Network_sz_LL=Network_sz_LL),
+                  Network_sz = Network_sz,
+                  X_gtp=X_gtp_inp, X_itp=X_itp_inp,
+                  model_args = list(Map = Map, Par = Par),
+                  optimize_args = list(getsd=FALSE, newtonsteps=0))
+  check <- TMBhelper::Check_Identifiable(fit2$tmb_list$Obj) 
+
+  newpar <- fit2$parameter_estimates$par
+  newpar[["logkappa1"]] <- -1
+
+  fit3 = fit_model( "settings"=settings, 
+                  "Lat_i"=Data_Geostat_inp[,"Lat"], 
+                  "Lon_i"=Data_Geostat_inp[,"Lon"], 
+                  "t_iz"=Data_Geostat_inp[,'Year'], 
+                  "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
+                  "b_i"=Data_Geostat_inp[,'Catch_KG'], 
+                  "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
+                  "v_i"=Data_Geostat_inp[,'Vessel'], 
+                  working_dir=path, 
+                  extrapolation_args=list(
+                    input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]), 
+                    Network_sz_LL=Network_sz_LL),
+                  Network_sz = Network_sz,
+                  X_gtp=X_gtp_inp, X_itp=X_itp_inp,
+                  model_args = list(Map = Map, Par = Par),
+                  optimize_args = list(getsd=FALSE, newtonsteps=0, startpar=newpar))
+  check <- TMBhelper::Check_Identifiable(fit3$tmb_list$Obj) 
+
+  fit = fit_model( "settings"=settings, 
+                "Lat_i"=Data_Geostat_inp[,"Lat"], 
+                "Lon_i"=Data_Geostat_inp[,"Lon"], 
+                "t_iz"=Data_Geostat_inp[,'Year'], 
+                "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
+                "b_i"=Data_Geostat_inp[,'Catch_KG'], 
+                "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
+                "v_i"=Data_Geostat_inp[,'Vessel'], 
+                working_dir=path, 
+                extrapolation_args=list(
+                  input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]),
+                  Network_sz_LL=Network_sz_LL),
+                Network_sz = Network_sz,
+                model_args = list(Map = Map, Par = Par),
+                  X_gtp=X_gtp_inp, X_itp=X_itp_inp,
+                optimize_args = list(startpar= newpar))
+
+   saveRDS(fit, file.path(path, "Fit.rds"))    
+
+  fit <- readRDS(file.path(path, "Fit.rds"))    
+
+ 
+  map_list = make_map_info( "Region"=settings$Region, "spatial_list"=fit$spatial_list, "Extrapolation_List"=fit$extrapolation_list )
+
+  Enc_prob = plot_encounter_diagnostic( Report=fit$Report, Data_Geostat=cbind("Catch_KG"=fit$data_frame[,'b_i']), DirName=fig)
+
+  Index = plot_biomass_index( DirName=fig, TmbData=fit$data_list, Sdreport=fit$parameter_estimates$SD, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, use_biascorr=TRUE, category_names=category_names[1] )
+
+  plot_range_index(Report=fit$Report, TmbData=fit$data_list, Sdreport=fit$parameter_estimates$SD, Znames=colnames(fit$data_list$Z_xm), PlotDir=fig, Year_Set=fit$years_to_plot, use_biascorr=TRUE, category_names=category_names[1])
+
+  Q = plot_quantile_diagnostic( TmbData=fit$data_list, Report=fit$Report, FileName_PP="Posterior_Predictive", FileName_Phist="Posterior_Predictive-Histogram", FileName_QQ="Q-Q_plot", FileName_Qhist="Q-Q_hist", save_dir=fig )
+
+  Dens_xt = plot_maps(plot_set=c(1,2,3,4,5,6,7,8,9), TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names[1], Cex=0.5)
+
+  Dens_xt = plot_maps(plot_set=12, TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names[1], Cex=0.5)
+
+    plot_residuals(Lat_i=fit$data_frame[,'Lat_i'], Lon_i=fit$data_frame[,'Lon_i'], TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Q=Q, savedir=fig, FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot)
+
+
 
 #######################################
 ## ST_SPAWNERS_GAMMA_TEMPRW_STRW
@@ -792,12 +946,18 @@ ObsModel = c(2,0)
   check <- TMBhelper::Check_Identifiable(fit1$tmb_list$Obj) 
 
   Map <- fit0$tmb_list$Map
-  Map$L_epsilon1_z <- factor(NA)
-  # Map$L_epsilon2_z <- factor(NA)
+  Map$L_omega1_z <- factor(c(1,NA))
+  Map$L_epsilon1_z <- factor(c(NA,NA))
+  Map$L_beta1_z <- factor(c(1,NA))
+  Map$L_epsilon2_z <- factor(c(NA,NA))
+  Map$L_beta2_z <- factor(c(1,NA))
 
-  Par <- fit0$tmb_list$Parameters
-  Par$L_epsilon1_z <- 0
-  # Par$L_epsilon2_z <- 0
+  Par <- fit0$tmb_list$Par
+  Par$L_omega1_z <- c(1,0)
+  Par$L_epsilon1_z <- c(0,0)
+  Par$L_beta1_z <- c(1,0)
+  Par$L_epsilon2_z <- c(0,0)
+  Par$L_beta2_z <- c(1,0)
 
   fit2 = fit_model( "settings"=settings, 
                   "Lat_i"=Data_Geostat_inp[,"Lat"], 
@@ -842,15 +1002,15 @@ ObsModel = c(2,0)
 
   Enc_prob = plot_encounter_diagnostic( Report=fit$Report, Data_Geostat=cbind("Catch_KG"=fit$data_frame[,'b_i']), DirName=fig)
 
-  Index = plot_biomass_index( DirName=fig, TmbData=fit$data_list, Sdreport=fit$parameter_estimates$SD, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, use_biascorr=TRUE, category_names=category_names[1] )
+  Index = plot_biomass_index( DirName=fig, TmbData=fit$data_list, Sdreport=fit$parameter_estimates$SD, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, use_biascorr=TRUE, category_names=category_names )
 
-  plot_range_index(Report=fit$Report, TmbData=fit$data_list, Sdreport=fit$parameter_estimates$SD, Znames=colnames(fit$data_list$Z_xm), PlotDir=fig, Year_Set=fit$years_to_plot, use_biascorr=TRUE, category_names=category_names[1])
+  plot_range_index(Report=fit$Report, TmbData=fit$data_list, Sdreport=fit$parameter_estimates$SD, Znames=colnames(fit$data_list$Z_xm), PlotDir=fig, Year_Set=fit$years_to_plot, use_biascorr=TRUE, category_names=category_names)
 
   Q = plot_quantile_diagnostic( TmbData=fit$data_list, Report=fit$Report, FileName_PP="Posterior_Predictive", FileName_Phist="Posterior_Predictive-Histogram", FileName_QQ="Q-Q_plot", FileName_Qhist="Q-Q_hist", save_dir=fig )
 
-  Dens_xt = plot_maps(plot_set=c(1,2,3,4,5,6,7,8,9), TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names[1], Cex=0.5)
+  Dens_xt = plot_maps(plot_set=c(1,2,3,4,5,6,7,8,9), TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names, Cex=0.5)
 
-  Dens_xt = plot_maps(plot_set=12, TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names[1], Cex=0.5)
+  Dens_xt = plot_maps(plot_set=12, TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names, Cex=0.5)
 
     plot_residuals(Lat_i=fit$data_frame[,'Lat_i'], Lon_i=fit$data_frame[,'Lon_i'], TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Q=Q, savedir=fig, FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot)
 
@@ -917,11 +1077,9 @@ ObsModel = c(2,0)
 
   Map <- fit0$tmb_list$Map
   Map$L_epsilon1_z <- factor(NA)
-  # Map$L_epsilon2_z <- factor(NA)
 
   Par <- fit0$tmb_list$Parameters
   Par$L_epsilon1_z <- 0
-  # Par$L_epsilon2_z <- 0
 
   fit2 = fit_model( "settings"=settings, 
                   "Lat_i"=Data_Geostat_inp[,"Lat"], 
@@ -1043,13 +1201,23 @@ ObsModel = c(2,0)
                   optimize_args = list(getsd=FALSE, newtonsteps=0))
   check <- TMBhelper::Check_Identifiable(fit1$tmb_list$Obj) 
 
+  newpar <- fit1$parameter_estimates$par
+  newpar[["logkappa1"]] <- 0.7
+
   Map <- fit0$tmb_list$Map
-  Map$L_epsilon1_z <- factor(NA)
-  # Map$L_epsilon2_z <- factor(NA)
+  Map$L_omega1_z <- factor(c(NA,NA))
+  Map$L_epsilon1_z <- factor(c(NA,NA))
+  Map$L_beta1_z <- factor(c(1,NA))
+  Map$L_epsilon2_z <- factor(c(NA,NA))
+  Map$L_beta2_z <- factor(c(1,NA))
 
   Par <- fit0$tmb_list$Parameters
-  Par$L_epsilon1_z <- 0
-  # Par$L_epsilon2_z <- 0
+  Par$L_omega1_z <- c(0,0)
+  Par$L_epsilon1_z <- c(0,0)
+  Par$L_beta1_z <- c(1,0)
+  Par$L_epsilon2_z <- c(0,0)
+  Par$L_beta2_z <- c(1,0)
+
 
   fit2 = fit_model( "settings"=settings, 
                   "Lat_i"=Data_Geostat_inp[,"Lat"], 
@@ -1065,7 +1233,7 @@ ObsModel = c(2,0)
                     Network_sz_LL=Network_sz_LL),
                   Network_sz = Network_sz,
                   model_args = list(Map = Map, Par = Par),
-                  optimize_args = list(getsd=FALSE, newtonsteps=0))
+                  optimize_args = list(getsd=FALSE, newtonsteps=0,startpar=newpar))
   check <- TMBhelper::Check_Identifiable(fit2$tmb_list$Obj) 
 
 
@@ -1171,30 +1339,30 @@ ObsModel = c(2,0)
                   optimize_args = list(getsd=FALSE, newtonsteps=0))
   check <- TMBhelper::Check_Identifiable(fit1$tmb_list$Obj) 
 
-  Map <- fit0$tmb_list$Map
-  Map$L_epsilon1_z <- factor(NA)
-  # Map$L_epsilon2_z <- factor(NA)
+  # Map <- fit0$tmb_list$Map
+  # Map$L_epsilon1_z <- factor(NA)
+  # # Map$L_epsilon2_z <- factor(NA)
 
-  Par <- fit0$tmb_list$Parameters
-  Par$L_epsilon1_z <- 0
-  # Par$L_epsilon2_z <- 0
+  # Par <- fit0$tmb_list$Parameters
+  # Par$L_epsilon1_z <- 0
+  # # Par$L_epsilon2_z <- 0
 
-  fit2 = fit_model( "settings"=settings, 
-                  "Lat_i"=Data_Geostat_inp[,"Lat"], 
-                  "Lon_i"=Data_Geostat_inp[,"Lon"], 
-                  "t_iz"=Data_Geostat_inp[,'Year'], 
-                  "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
-                  "b_i"=Data_Geostat_inp[,'Catch_KG'], 
-                  "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
-                  "v_i"=Data_Geostat_inp[,'Vessel'], 
-                  working_dir=path, 
-                  extrapolation_args=list(
-                    input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]), 
-                    Network_sz_LL=Network_sz_LL),
-                  Network_sz = Network_sz,
-                  model_args = list(Map = Map, Par = Par),
-                  optimize_args = list(getsd=FALSE, newtonsteps=0))
-  check <- TMBhelper::Check_Identifiable(fit2$tmb_list$Obj) 
+  # fit2 = fit_model( "settings"=settings, 
+  #                 "Lat_i"=Data_Geostat_inp[,"Lat"], 
+  #                 "Lon_i"=Data_Geostat_inp[,"Lon"], 
+  #                 "t_iz"=Data_Geostat_inp[,'Year'], 
+  #                 "c_i"=Data_Geostat_inp[,"CategoryNum"]-1, 
+  #                 "b_i"=Data_Geostat_inp[,'Catch_KG'], 
+  #                 "a_i"=Data_Geostat_inp[,'AreaSwept_km2'], 
+  #                 "v_i"=Data_Geostat_inp[,'Vessel'], 
+  #                 working_dir=path, 
+  #                 extrapolation_args=list(
+  #                   input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]), 
+  #                   Network_sz_LL=Network_sz_LL),
+  #                 Network_sz = Network_sz,
+  #                 model_args = list(Map = Map, Par = Par),
+  #                 optimize_args = list(getsd=FALSE, newtonsteps=0))
+  # check <- TMBhelper::Check_Identifiable(fit2$tmb_list$Obj) 
 
 
   fit = fit_model( "settings"=settings, 
@@ -1210,8 +1378,9 @@ ObsModel = c(2,0)
                   input_grid=cbind("Lat"=Data_Geostat_inp[,"Lat"], "Lon"=Data_Geostat_inp[,"Lon"],"child_i"=Data_Geostat_inp[,"Knot"],"Area_km2"=Data_Geostat_inp[,"AreaSwept_km2"]),
                   Network_sz_LL=Network_sz_LL),
                 Network_sz = Network_sz,
-                model_args = list(Map = Map, Par = Par),
-                optimize_args = list(startpar= fit2$parameter_estimates$par))
+                X_gtp = X_gtp_input, X_itp=X_itp_input,
+                # model_args = list(Map = Map, Par = Par),
+                optimize_args = list(startpar= fit1$parameter_estimates$par))
 
    saveRDS(fit, file.path(path, "Fit.rds"))    
 
@@ -1666,8 +1835,7 @@ ObsModel = c(1,0)
     plot_residuals(Lat_i=fit$data_frame[,'Lat_i'], Lon_i=fit$data_frame[,'Lon_i'], TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Q=Q, savedir=fig, FileName=fig, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot)
 
 
-df <- data.frame("Model"=c("SST_SPAWNERS_LOGNORMAL_TEMPRW",
-						"SST_SPAWNERS_GAMMA_TEMPRW",
+df <- data.frame("Model"=c("SST_SPAWNERS_GAMMA_TEMPRW",
 						"SST_SPAWNERS_GAMMA_TEMPRWint",
 						"ST_SPAWNERS_GAMMA_TEMPRW"))
 df$AIC <- NA
