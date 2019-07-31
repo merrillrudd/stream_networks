@@ -3,6 +3,7 @@ rm(list=ls())
 ###########################
 ## set working directory
 ###########################
+main <- "C:\\merrill\\stream_networks\\OR"
 dir <- "C:\\merrill\\stream_networks\\OR\\Siletz_demo"
 setwd(dir)
 
@@ -265,6 +266,6 @@ plot_range_index(Report=fit$Report, TmbData=fit$data_list, Sdreport=fit$paramete
 
 Q = plot_quantile_diagnostic( TmbData=fit$data_list, Report=fit$Report, FileName_PP="Posterior_Predictive", FileName_Phist="Posterior_Predictive-Histogram", FileName_QQ="Q-Q_plot", FileName_Qhist="Q-Q_hist", save_dir=path )
 
-Dens_xt = plot_maps(plot_set=c(1,2,3,4,5,6,7,8,9), TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=path, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names[2], Cex=0.5)
+Dens_xt = plot_maps(plot_set=c(1,2,3,4,5,6,7,8,9,15,16), TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Sdreport=fit$parameter_estimates$SD, MapSizeRatio=map_list[["MapSizeRatio"]], Xlim=map_list[["Xlim"]], Ylim=map_list[["Ylim"]], FileName=path, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot, category_names=category_names[2], Cex=0.5)
 
 plot_residuals(Lat_i=fit$data_frame[,'Lat_i'], Lon_i=fit$data_frame[,'Lon_i'], TmbData=fit$data_list, spatial_list=fit$spatial_list, Report=fit$Report, Q=Q, savedir=path, FileName=path, Year_Set=fit$year_labels, Years2Include=fit$years_to_plot)

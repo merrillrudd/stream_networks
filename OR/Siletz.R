@@ -43,6 +43,12 @@ obs <- readRDS(file.path(res_dir, "observations.rds"))
 net <- readRDS(file.path(res_dir, "network.rds"))
 hab <- readRDS(file.path(res_dir, "habitat.rds"))
 
+or_siletz_coho <- NULL
+or_siletz_coho[['network']] <- net
+or_siletz_coho[['observations']] <- obs
+or_siletz_coho[['habitat']] <- hab
+save(or_siletz_coho, file=file.path(data_dir, "or_siletz_coho.rda"))
+
 #########################
 ## read in data
 ##########################
